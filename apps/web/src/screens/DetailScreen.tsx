@@ -61,7 +61,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
       return;
     }
     if (notificationSupport() === "default") await requestPermission();
-    subscribe(notice.id);
+    subscribe(notice);
   };
 
   const onOffset = (kind: AlertKind, off: number) => {

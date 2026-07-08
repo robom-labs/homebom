@@ -86,8 +86,8 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
         <div className="empty">
           <p className="empty__title">실공고 연결 대기 중입니다</p>
           <p className="empty__body">
-            지금 화면에는 실제 청약 공고만 표시합니다. 데이터 연결이 완료되기 전까지 임의 단지나
-            추정 공고는 보여주지 않습니다.
+            청약 공고는 9시에만 보이는 방식이 아닙니다. 데이터 연결이 완료되기 전까지 임의 단지나 추정
+            공고는 보여주지 않습니다.
           </p>
         </div>
       )}
@@ -95,7 +95,9 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
       {!loading && filtered.length === 0 && source === "live" && (
         <div className="empty">
           <p className="empty__title">조건에 맞는 공고가 없어요</p>
-          <p className="empty__body">필터를 넓혀보세요. 새 청약 공고가 확인되면 여기에 표시됩니다.</p>
+          <p className="empty__body">
+            새 청약 공고가 확인되면 여기에 표시됩니다. 이미 켜둔 알림은 저장된 공고 기준으로 유지됩니다.
+          </p>
         </div>
       )}
 

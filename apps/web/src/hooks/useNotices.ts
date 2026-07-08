@@ -17,7 +17,7 @@ export function useNotices() {
     if (!liveUrl) {
       setNotices([]);
       setSource("not-connected");
-      setError("실공고 연결이 아직 완료되지 않았습니다. 허구 공고는 표시하지 않습니다.");
+      setError("실공고 연결이 아직 완료되지 않았습니다. 공고는 특정 시간에만 보이는 방식이 아닙니다.");
       setLoading(false);
       return;
     }

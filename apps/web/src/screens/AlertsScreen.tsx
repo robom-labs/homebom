@@ -6,18 +6,26 @@ import { formatKstDateTime } from "@zoopzoopcall/core";
 import { PermissionBanner } from "../components/PermissionBanner";
 import { useNow } from "../hooks/useNow";
 import { collectPendingAlerts } from "../notify/scheduler";
-import type { SubMap } from "../store/subscriptions";
+import type { NoticeSnapshotMap, SubMap } from "../store/subscriptions";
 
 type Props = {
   notices: Notice[];
   subs: SubMap;
+  noticeSnapshots: NoticeSnapshotMap;
 };
 
-export function AlertsScreen({ notices, subs }: Props) {
+export function AlertsScreen({ notices, subs, noticeSnapshots }: Props) {
   const now = useNow(15_000);
 
-  const pending = useMemo(() => collectPendingAlerts(notices, subs, now), [notices, subs, now]);
-  const byId = useMemo(() => new Map(notices.map((n) => [n.id, n])), [notices]);
+  const pending = useMemo(
+    () => collectPendingAlerts(notices, subs, now, noticeSnapshots),
+    [notices, noticeSnapshots, subs, now],
+  );
+  const byId = useMemo(() => {
+    const map = new Map(Object.values(noticeSnapshots).map((n) => [n.id, n]));
+    for (const notice of notices) map.set(notice.id, notice);
+    return map;
+  }, [notices, noticeSnapshots]);
 
   return (
     <div className="screen">
@@ -54,8 +62,8 @@ export function AlertsScreen({ notices, subs }: Props) {
       )}
 
       <div className="notice-bar notice-bar--muted">
-        현재 알림은 줍줍콜이 폰 브라우저에 열려 있거나 홈 화면 앱으로 실행 중일 때 동작합니다. 신청 전
-        모집공고 원문과 청약홈을 함께 확인하세요.
+        알림을 켠 공고는 저장된 일정 기준으로 유지됩니다. 공고가 목록에서 잠시 빠졌다가 다시 확인되면
+        최신 일정으로 갱신됩니다. 현재 알림은 앱이 실행 중일 때 동작합니다.
       </div>
     </div>
   );

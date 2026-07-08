@@ -13,9 +13,22 @@ import { ListScreen } from "./screens/ListScreen";
 export default function App() {
   const { notices, source, error, loading } = useNotices();
   const subscriptions = useSubscriptions();
+  const { noticeSnapshots, subs, syncNoticeSnapshots } = subscriptions;
 
-  const stateRef = useRef({ notices, subs: subscriptions.subs });
-  stateRef.current = { notices, subs: subscriptions.subs };
+  useEffect(() => {
+    syncNoticeSnapshots(notices);
+  }, [notices, syncNoticeSnapshots]);
+
+  const stateRef = useRef({
+    notices,
+    subs,
+    noticeSnapshots,
+  });
+  stateRef.current = {
+    notices,
+    subs,
+    noticeSnapshots,
+  };
 
   useEffect(() => startAlertScheduler(() => stateRef.current), []);
 
@@ -32,7 +45,7 @@ export default function App() {
                   source={source}
                   error={error}
                   loading={loading}
-                  subs={subscriptions.subs}
+                  subs={subs}
                 />
               }
             />
@@ -40,7 +53,16 @@ export default function App() {
               path="/notice/:id"
               element={<DetailScreen notices={notices} subscriptions={subscriptions} />}
             />
-            <Route path="/alerts" element={<AlertsScreen notices={notices} subs={subscriptions.subs} />} />
+            <Route
+              path="/alerts"
+              element={
+                <AlertsScreen
+                  notices={notices}
+                  subs={subs}
+                  noticeSnapshots={noticeSnapshots}
+                />
+              }
+            />
             <Route path="/info" element={<InfoScreen source={source} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
