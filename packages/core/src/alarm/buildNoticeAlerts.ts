@@ -50,8 +50,8 @@ export function buildNoticeAlerts(
           : `[${notice.houseName}] 접수 마감 ${offsetLabel(off)} 전`;
       const body =
         kind === "open"
-          ? "청약홈에서 지금 접수하세요. 공동인증서와 청약통장을 미리 준비하세요."
-          : "곧 마감됩니다. 아직이라면 지금 청약홈에서 신청하세요.";
+          ? "접수 시작 시간입니다. 모집공고 원문과 청약홈에서 신청 조건을 확인하세요."
+          : "곧 마감됩니다. 모집공고 원문과 청약홈에서 마감 전 절차를 확인하세요.";
       return {
         id: `${notice.id}:${kind}:${off}`,
         noticeId: notice.id,
@@ -60,7 +60,7 @@ export function buildNoticeAlerts(
         fireAt: target - off * 60_000,
         title,
         body,
-        url: notice.applyHomeUrl,
+        url: notice.noticeUrl ?? notice.applyHomeUrl,
       };
     })
     .filter((a) => a.fireAt > now);

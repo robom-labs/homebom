@@ -58,37 +58,44 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
         <div className="masthead__row">
           <h1 className="masthead__brand">줍줍콜</h1>
           <span className={`source source--${source}`}>
-            {source === "live" ? "실시간" : "샘플 데이터"}
+            {source === "live" ? "실공고" : "연결 필요"}
           </span>
         </div>
-        <p className="masthead__tagline">줍줍 접수가 열리고 닫히는 순간, 폰으로 울려드립니다.</p>
+        <p className="masthead__tagline">청약홈 접수 시작과 마감 시간을 놓치지 않게 챙깁니다.</p>
       </header>
 
       {error && <div className="notice-bar">{error}</div>}
-      {source === "sample" && !error && (
-        <div className="notice-bar notice-bar--muted">
-          지금은 화면·알림 동작을 보여주는 샘플 공고입니다. 실제 공고 연결 방법은 안내 탭에 있어요.
-        </div>
-      )}
 
       <PermissionBanner compact />
 
-      <FilterBar
-        activeType={type}
-        onType={setType}
-        regions={regions}
-        region={region}
-        onRegion={setRegion}
-        openOnly={openOnly}
-        onOpenOnly={setOpenOnly}
-      />
+      {notices.length > 0 && (
+        <FilterBar
+          activeType={type}
+          onType={setType}
+          regions={regions}
+          region={region}
+          onRegion={setRegion}
+          openOnly={openOnly}
+          onOpenOnly={setOpenOnly}
+        />
+      )}
 
       {loading && <p className="empty">공고를 불러오는 중입니다…</p>}
 
-      {!loading && filtered.length === 0 && (
+      {!loading && filtered.length === 0 && source === "not-connected" && (
+        <div className="empty">
+          <p className="empty__title">실공고 연결 대기 중입니다</p>
+          <p className="empty__body">
+            지금 화면에는 실제 청약 공고만 표시합니다. 데이터 연결이 완료되기 전까지 임의 단지나
+            추정 공고는 보여주지 않습니다.
+          </p>
+        </div>
+      )}
+
+      {!loading && filtered.length === 0 && source === "live" && (
         <div className="empty">
           <p className="empty__title">조건에 맞는 공고가 없어요</p>
-          <p className="empty__body">필터를 넓혀보세요. 새 줍줍 공고가 뜨면 여기에 모입니다.</p>
+          <p className="empty__body">필터를 넓혀보세요. 새 청약 공고가 확인되면 여기에 표시됩니다.</p>
         </div>
       )}
 

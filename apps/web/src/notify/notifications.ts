@@ -38,15 +38,3 @@ export async function showAppNotification(
   }
   new Notification(title, options);
 }
-
-/** 알림이 실제로 울리는지 확인하는 테스트 알림. 기본 5초 뒤에 울린다. */
-export function fireTestNotification(delayMs = 5000): void {
-  window.setTimeout(() => {
-    void showAppNotification(
-      "줍줍콜 테스트 알림",
-      "알림이 정상 동작합니다. 접수 시작·마감도 이렇게 알려드려요.",
-      window.location.href,
-      "zzc-test",
-    );
-  }, delayMs);
-}

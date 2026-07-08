@@ -4,7 +4,6 @@ export type SubMap = Record<string, SubEntry>;
 
 const SUBS_KEY = "zzc:subs:v1";
 const FIRED_KEY = "zzc:fired:v1";
-const ANCHOR_KEY = "zzc:anchor:v1";
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -42,16 +41,4 @@ export function markFired(id: string): void {
   const fired = readJson<Record<string, number>>(FIRED_KEY, {});
   fired[id] = Date.now();
   localStorage.setItem(FIRED_KEY, JSON.stringify(fired));
-}
-
-/** 샘플 데이터 기준 시각. 24시간이 지나면 새로 잡아 데모가 계속 살아있게 한다. */
-export function loadSampleAnchor(): number {
-  const saved = Number(localStorage.getItem(ANCHOR_KEY));
-  if (Number.isFinite(saved) && saved > 0 && Date.now() - saved < 24 * 3600_000) {
-    return saved;
-  }
-  // 5분 경계로 올림해 접수 시각이 정시(…:05, …:10)로 떨어지게 한다.
-  const anchor = Math.ceil(Date.now() / 300_000) * 300_000;
-  localStorage.setItem(ANCHOR_KEY, String(anchor));
-  return anchor;
 }

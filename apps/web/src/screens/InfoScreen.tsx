@@ -11,11 +11,10 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
       <section className="info-card">
         <h2>줍줍콜은</h2>
         <p>
-          무순위·잔여세대·취소후재공급 청약(이른바 줍줍) 접수가 열리고 닫히는 순간을, 내 조건에 맞는
-          것만 골라 폰으로 미리 울려주는 서비스입니다.
+          무순위·잔여세대·취소후재공급 청약 접수 시작과 마감 시간을 챙기기 위한 알림 서비스입니다.
         </p>
         <p>
-          줍줍콜은 정보를 모아 알려드릴 뿐, 청약 신청과 자격 확인은 언제나{" "}
+          청약 신청과 자격 확인은 언제나{" "}
           <a href="https://www.applyhome.co.kr" target="_blank" rel="noreferrer">
             청약홈(applyhome.co.kr)
           </a>
@@ -38,11 +37,10 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
         <h2>데이터 출처</h2>
         <p>
           공공데이터포털의 <strong>한국부동산원 청약홈 분양정보 조회 서비스</strong>를 사용합니다.
-          {source === "sample" && (
+          {source === "not-connected" && (
             <>
               {" "}
-              지금 보이는 공고는 <strong>화면·알림 동작 확인용 샘플</strong>이며 실제 공고가 아닙니다.
-              서비스키와 프록시 함수를 연결하면 실제 공고로 전환됩니다(저장소의 DEPLOY 문서 참고).
+              실공고 연결이 완료되지 않은 상태에서는 임의 공고를 표시하지 않습니다.
             </>
           )}
         </p>
@@ -51,14 +49,15 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
       <section className="info-card">
         <h2>알아두세요</h2>
         <ul>
-          <li>접수 일정은 정정 공고로 바뀔 수 있어요. 신청 전 청약홈 원문을 확인하세요.</li>
+          <li>청약홈 신청 가능 시간은 영업일 09:00~17:30 기준입니다.</li>
+          <li>접수 일정은 정정 공고로 바뀔 수 있어요. 신청 전 모집공고 원문을 확인하세요.</li>
           <li>줍줍콜은 당첨 가능성이나 자격을 판정하지 않습니다.</li>
-          <li>v0.1.0 알림은 앱(브라우저)이 실행 중일 때 울립니다. 서버 푸시는 v0.2.0 예정.</li>
+          <li>현재 알림은 앱이 실행 중일 때 동작합니다. 중요한 일정은 청약홈에서도 함께 확인하세요.</li>
         </ul>
       </section>
 
       <p className="fineprint">
-        줍줍콜 v0.1.0 ·{" "}
+        줍줍콜 ·{" "}
         <a href="https://github.com/runnerpyrri-lgtm/zoopzoopcall" target="_blank" rel="noreferrer">
           GitHub
         </a>

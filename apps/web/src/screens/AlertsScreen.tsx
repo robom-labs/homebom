@@ -1,11 +1,10 @@
-// 내 알림 화면. 예약된 알림 목록·테스트 알림·권한 안내를 제공한다.
-import { useMemo, useState } from "react";
+// 내 알림 화면. 예약된 알림 목록과 권한 안내를 제공한다.
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import type { Notice } from "@zoopzoopcall/core";
 import { formatKstDateTime } from "@zoopzoopcall/core";
 import { PermissionBanner } from "../components/PermissionBanner";
 import { useNow } from "../hooks/useNow";
-import { fireTestNotification, notificationSupport } from "../notify/notifications";
 import { collectPendingAlerts } from "../notify/scheduler";
 import type { SubMap } from "../store/subscriptions";
 
@@ -16,16 +15,9 @@ type Props = {
 
 export function AlertsScreen({ notices, subs }: Props) {
   const now = useNow(15_000);
-  const [testState, setTestState] = useState<"idle" | "armed">("idle");
 
   const pending = useMemo(() => collectPendingAlerts(notices, subs, now), [notices, subs, now]);
   const byId = useMemo(() => new Map(notices.map((n) => [n.id, n])), [notices]);
-
-  const onTest = () => {
-    fireTestNotification(5000);
-    setTestState("armed");
-    window.setTimeout(() => setTestState("idle"), 8000);
-  };
 
   return (
     <div className="screen">
@@ -34,18 +26,6 @@ export function AlertsScreen({ notices, subs }: Props) {
       </header>
 
       <PermissionBanner />
-
-      {notificationSupport() === "granted" && (
-        <div className="test-card">
-          <div>
-            <p className="test-card__title">알림이 잘 오는지 확인해 보세요</p>
-            <p className="test-card__body">누르고 5초 뒤에 테스트 알림이 울립니다. 화면을 꺼도 좋아요.</p>
-          </div>
-          <button className="btn btn--primary btn--sm" onClick={onTest} disabled={testState === "armed"}>
-            {testState === "armed" ? "5초 뒤 울려요…" : "테스트 알림"}
-          </button>
-        </div>
-      )}
 
       {pending.length === 0 ? (
         <div className="empty">
@@ -74,8 +54,8 @@ export function AlertsScreen({ notices, subs }: Props) {
       )}
 
       <div className="notice-bar notice-bar--muted">
-        이 버전(v0.1.0)의 알림은 줍줍콜이 폰 브라우저에 열려 있거나 홈 화면 앱으로 실행 중일 때
-        울립니다. 완전히 종료된 상태에서도 오는 서버 푸시는 v0.2.0에서 제공할 예정이에요.
+        현재 알림은 줍줍콜이 폰 브라우저에 열려 있거나 홈 화면 앱으로 실행 중일 때 동작합니다. 신청 전
+        모집공고 원문과 청약홈을 함께 확인하세요.
       </div>
     </div>
   );

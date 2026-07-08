@@ -57,6 +57,7 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
   const price = priceText(notice);
   const meta = [
     notice.region,
+    notice.housingCategory,
     notice.supplyCount ? `${notice.supplyCount}세대` : null,
     price ?? "금액은 공고문 확인",
   ]

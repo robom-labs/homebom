@@ -1,14 +1,12 @@
-// 공고 데이터를 실시간 프록시(VITE_NOTICES_URL) 또는 샘플에서 로드하는 훅.
+// 공고 데이터를 실공고 프록시(VITE_NOTICES_URL)에서만 로드하는 훅.
 import { useCallback, useEffect, useState } from "react";
 import type { Notice } from "@zoopzoopcall/core";
-import { generateSampleNotices } from "../data/sampleNotices";
-import { loadSampleAnchor } from "../store/subscriptions";
 
-export type NoticeSource = "live" | "sample";
+export type NoticeSource = "live" | "not-connected";
 
 export function useNotices() {
   const [notices, setNotices] = useState<Notice[]>([]);
-  const [source, setSource] = useState<NoticeSource>("sample");
+  const [source, setSource] = useState<NoticeSource>("not-connected");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -16,22 +14,28 @@ export function useNotices() {
     setLoading(true);
     setError(null);
     const liveUrl = import.meta.env.VITE_NOTICES_URL as string | undefined;
-    if (liveUrl) {
-      try {
-        const res = await fetch(liveUrl);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as Notice[];
-        setNotices(data);
-        setSource("live");
-        setLoading(false);
-        return;
-      } catch {
-        setError("실시간 공고를 불러오지 못해 샘플 데이터를 보여드립니다.");
-      }
+    if (!liveUrl) {
+      setNotices([]);
+      setSource("not-connected");
+      setError("실공고 연결이 아직 완료되지 않았습니다. 허구 공고는 표시하지 않습니다.");
+      setLoading(false);
+      return;
     }
-    setNotices(generateSampleNotices(loadSampleAnchor()));
-    setSource("sample");
-    setLoading(false);
+    try {
+      const res = await fetch(liveUrl);
+      const data = (await res.json()) as Notice[] | { error?: string };
+      if (!res.ok || !Array.isArray(data)) {
+        throw new Error(Array.isArray(data) ? `HTTP ${res.status}` : data.error || `HTTP ${res.status}`);
+      }
+      setNotices(data);
+      setSource("live");
+    } catch (err) {
+      setNotices([]);
+      setSource("not-connected");
+      setError(err instanceof Error ? err.message : "실공고를 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

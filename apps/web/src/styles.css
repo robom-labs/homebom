@@ -172,14 +172,14 @@ a {
   white-space: nowrap;
 }
 
-.source--sample {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-
 .source--live {
   background: var(--open-soft);
   color: var(--open);
+}
+
+.source--not-connected {
+  background: var(--stamp-soft);
+  color: var(--stamp);
 }
 
 /* ---- 안내 바 ---- */
@@ -542,6 +542,12 @@ a {
   color: var(--stamp);
 }
 
+.detail__actions {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 /* ---- 버튼 ---- */
 .btn {
   display: inline-flex;
@@ -584,6 +590,10 @@ a {
   min-height: 44px;
   margin-top: 12px;
   font-size: 15px;
+}
+
+.detail__actions .btn--ghost.btn--big {
+  margin-top: 0;
 }
 
 /* ---- 알림 설정 카드 ---- */
@@ -687,31 +697,44 @@ a {
   font-weight: 600;
 }
 
-/* ---- 내 알림 ---- */
-.test-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+.detail__models {
+  margin-top: 14px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 16px;
-  margin: 10px 0;
+  overflow: hidden;
   box-shadow: var(--shadow);
 }
 
-.test-card__title {
+.detail__models h2 {
+  padding: 14px 16px 10px;
+  font-size: 17px;
   font-weight: 800;
-  font-size: 16px;
 }
 
-.test-card__body {
-  margin-top: 3px;
+.model-row {
+  display: grid;
+  gap: 8px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.model-row div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.model-row strong {
+  font-weight: 800;
+}
+
+.model-row span {
   color: var(--ink-soft);
   font-size: 14.5px;
 }
 
+/* ---- 내 알림 ---- */
 .alert-row {
   display: block;
   text-decoration: none;

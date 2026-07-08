@@ -23,6 +23,12 @@ type Props = {
   subscriptions: ReturnType<typeof useSubscriptions>;
 };
 
+function priceText(notice: Notice): string | undefined {
+  if (notice.priceMin && notice.priceMax) return `${formatManwon(notice.priceMin)} ~ ${formatManwon(notice.priceMax)}`;
+  if (notice.priceMin) return formatManwon(notice.priceMin);
+  return undefined;
+}
+
 export function DetailScreen({ notices, subscriptions }: Props) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -65,21 +71,22 @@ export function DetailScreen({ notices, subscriptions }: Props) {
 
   const rows: Array<[string, string | undefined]> = [
     ["유형", notice.type],
+    ["공식 구분", notice.officialTypeName],
+    ["주택 분류", notice.housingCategory],
     ["지역", notice.region],
     ["위치", notice.address],
+    ["우편번호", notice.zipCode],
     ["공급", notice.supplyCount ? `${notice.supplyCount}세대` : undefined],
-    [
-      "공급금액",
-      notice.priceMin
-        ? notice.priceMax
-          ? `${formatManwon(notice.priceMin)} ~ ${formatManwon(notice.priceMax)}`
-          : formatManwon(notice.priceMin)
-        : undefined,
-    ],
+    ["공급금액", priceText(notice) ?? "모집공고 원문 확인 필요"],
     ["모집공고일", notice.announceDate],
     ["접수 시작", formatKstDateTime(notice.receiptStart)],
     ["접수 마감", formatKstDateTime(notice.receiptEnd)],
     ["당첨자 발표", notice.winnerDate],
+    ["계약기간", notice.contractStartDate && notice.contractEndDate ? `${notice.contractStartDate} ~ ${notice.contractEndDate}` : undefined],
+    ["입주예정", notice.moveInMonth],
+    ["시행사", notice.businessOwnerName],
+    ["문의처", notice.contactPhone],
+    ["신문사", notice.newspaperName],
   ];
 
   return (
@@ -113,10 +120,25 @@ export function DetailScreen({ notices, subscriptions }: Props) {
         </div>
       )}
 
-      <a className="btn btn--primary btn--big" href={notice.applyHomeUrl} target="_blank" rel="noreferrer">
-        청약홈에서 신청하기
-      </a>
-      <p className="fineprint">신청·자격 확인은 청약홈(applyhome.co.kr) 공식 사이트에서만 진행됩니다.</p>
+      <div className="detail__actions">
+        {notice.noticeUrl && (
+          <a className="btn btn--primary btn--big" href={notice.noticeUrl} target="_blank" rel="noreferrer">
+            모집공고 원문 보기
+          </a>
+        )}
+        <a className="btn btn--ghost btn--big" href={notice.applyHomeUrl} target="_blank" rel="noreferrer">
+          청약홈으로 이동
+        </a>
+        {notice.officialHomepageUrl && (
+          <a className="btn btn--ghost btn--big" href={notice.officialHomepageUrl} target="_blank" rel="noreferrer">
+            공식 홈페이지 보기
+          </a>
+        )}
+      </div>
+      <p className="fineprint">
+        청약 신청과 자격 확인은 청약홈 공식 사이트에서 직접 진행해야 합니다. 접수 가능 시간은 영업일
+        09:00~17:30 기준이며, 공고별 별도 조건과 정정 여부는 모집공고 원문을 확인하세요.
+      </p>
 
       {!finished && (
         <section className="alerts-card">
@@ -181,9 +203,30 @@ export function DetailScreen({ notices, subscriptions }: Props) {
           ))}
       </section>
 
+      {notice.modelSummaries && notice.modelSummaries.length > 0 && (
+        <section className="detail__models">
+          <h2>주택형·금액</h2>
+          {notice.modelSummaries.map((model) => (
+            <div className="model-row" key={`${model.modelNo ?? ""}-${model.houseType ?? ""}`}>
+              <div>
+                <strong>{model.houseType ?? "주택형 확인 필요"}</strong>
+                <span>{model.supplyArea ? `${model.supplyArea}㎡` : "면적 확인 필요"}</span>
+              </div>
+              <div>
+                <span>
+                  {model.supplyCount ? `일반 ${model.supplyCount}세대` : "일반공급 확인 필요"}
+                  {model.specialSupplyCount ? ` · 특별 ${model.specialSupplyCount}세대` : ""}
+                </span>
+                <strong>{model.priceMax ? formatManwon(model.priceMax) : "금액 확인 필요"}</strong>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       <p className="fineprint">
-        출처: 한국부동산원 청약홈 분양정보. 정정·취소로 일정이 바뀔 수 있으니 신청 전 청약홈 원문을
-        확인하세요.
+        출처: 한국부동산원 청약홈 분양정보. 정정·취소로 일정이 바뀔 수 있으니 신청 전 모집공고 원문과
+        청약홈을 함께 확인하세요.
       </p>
     </div>
   );
