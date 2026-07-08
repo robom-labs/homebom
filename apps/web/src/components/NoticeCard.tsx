@@ -4,7 +4,7 @@ import type { Notice } from "@zoopzoopcall/core";
 import {
   ddayKst,
   formatKstDateTime,
-  formatManwon,
+  formatPriceRange,
   formatRemaining,
   getNoticeStatus,
   isClosingSoon,
@@ -18,14 +18,6 @@ type Props = {
   now: number;
   subscribed: boolean;
 };
-
-function priceText(notice: Notice): string | null {
-  if (notice.priceMin && notice.priceMax) {
-    return `${formatManwon(notice.priceMin)} ~ ${formatManwon(notice.priceMax)}`;
-  }
-  if (notice.priceMin) return formatManwon(notice.priceMin);
-  return null;
-}
 
 function receiptText(notice: Notice): string {
   const start = formatKstDateTime(notice.receiptStart);
@@ -54,13 +46,8 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
     stamp = { label: d === 0 ? "오늘 시작" : `D-${d}`, tone: d === 0 ? "red" : "ink" };
   }
 
-  const price = priceText(notice);
-  const meta = [
-    notice.region,
-    notice.housingCategory,
-    notice.supplyCount ? `${notice.supplyCount}세대` : null,
-    price ?? "금액은 공고문 확인",
-  ]
+  const price = formatPriceRange(notice);
+  const eyebrow = [notice.region, notice.supplyCount ? `${notice.supplyCount}세대` : null]
     .filter(Boolean)
     .join(" · ");
 
@@ -78,10 +65,19 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
         {stamp && <DdayStamp label={stamp.label} tone={stamp.tone} />}
       </div>
       <h3 className="card__title">{notice.houseName}</h3>
-      <p className="card__meta">{meta}</p>
-      <p className="card__receipt">
-        접수 <strong>{receiptText(notice)}</strong>
-      </p>
+      <p className="card__eyebrow">{eyebrow}</p>
+      <dl className="card__info">
+        <div className="card__info-row">
+          <dt className="card__label">분양가</dt>
+          <dd className={`card__value${price ? " card__value--price" : " card__value--muted"}`}>
+            {price ?? "공고문 확인"}
+          </dd>
+        </div>
+        <div className="card__info-row">
+          <dt className="card__label">접수</dt>
+          <dd className="card__value">{receiptText(notice)}</dd>
+        </div>
+      </dl>
       <div className="card__foot">
         {status === "접수중" && (
           <span className={`card__left${closingSoon ? " card__left--urgent" : ""}`}>

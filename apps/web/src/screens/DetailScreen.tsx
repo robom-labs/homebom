@@ -6,6 +6,7 @@ import {
   DEFAULT_OPEN_OFFSETS,
   formatKstDateTime,
   formatManwon,
+  formatPriceRange,
   getNoticeStatus,
   isClosingSoon,
   offsetLabel,
@@ -22,12 +23,6 @@ type Props = {
   notices: Notice[];
   subscriptions: ReturnType<typeof useSubscriptions>;
 };
-
-function priceText(notice: Notice): string | undefined {
-  if (notice.priceMin && notice.priceMax) return `${formatManwon(notice.priceMin)} ~ ${formatManwon(notice.priceMax)}`;
-  if (notice.priceMin) return formatManwon(notice.priceMin);
-  return undefined;
-}
 
 export function DetailScreen({ notices, subscriptions }: Props) {
   const { id } = useParams<{ id: string }>();
@@ -77,7 +72,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
     ["위치", notice.address],
     ["우편번호", notice.zipCode],
     ["공급", notice.supplyCount ? `${notice.supplyCount}세대` : undefined],
-    ["공급금액", priceText(notice) ?? "모집공고 원문 확인 필요"],
+    ["공급금액", formatPriceRange(notice) ?? "모집공고 원문 확인 필요"],
     ["모집공고일", notice.announceDate],
     ["접수 시작", formatKstDateTime(notice.receiptStart)],
     ["접수 마감", formatKstDateTime(notice.receiptEnd)],
