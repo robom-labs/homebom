@@ -3,7 +3,7 @@ import type { Notice, NoticeAlert } from "@zoopzoopcall/core";
 import { buildNoticeAlerts } from "@zoopzoopcall/core";
 import type { NoticeSnapshotMap, SubMap } from "../store/subscriptions";
 import { loadFired, markFired } from "../store/subscriptions";
-import { showAppNotification } from "./notifications";
+import { notificationSupport, showAppNotification } from "./notifications";
 
 /** 아직 오지 않은(예정된) 알림 전체를 시간순으로 모은다. */
 export function collectPendingAlerts(
@@ -43,6 +43,11 @@ export function startAlertScheduler(
   getState: () => { notices: Notice[]; subs: SubMap; noticeSnapshots: NoticeSnapshotMap },
 ): () => void {
   const check = () => {
+    // ★ 권한이 아직 granted 가 아니면 아무것도 하지 않는다.
+    // (showAppNotification 은 권한이 없으면 조용히 리턴하는데, 그 전에 markFired 를 부르면
+    //  알림이 "울린 것"으로 표시돼 영구 억제된다 → 나중에 권한을 켜도 그 알림이 다시 안 온다.)
+    // 권한이 없을 땐 fired 로 찍지 않고 넘어가, 권한 허용 후 유예시간(6h) 안이면 그때 울리게 한다.
+    if (notificationSupport() !== "granted") return;
     const { notices, subs, noticeSnapshots } = getState();
     for (const alert of collectDueAlerts(notices, subs, Date.now(), noticeSnapshots)) {
       markFired(alert.id);
