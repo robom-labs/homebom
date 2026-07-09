@@ -16,3 +16,18 @@ export function StatusBadge({ status }: { status: NoticeStatus }) {
 export function TypeBadge({ type }: { type: string }) {
   return <span className="badge badge--type">{type}</span>;
 }
+
+// 정정 이력 배지. 이미 상태가 "정정"이면 중복이라 표시하지 않는다.
+// (NoticeCard·DetailScreen에서 동일하게 쓰던 로직을 공용화)
+export function CorrectionBadge({
+  corrected,
+  status,
+}: {
+  corrected?: boolean;
+  status: NoticeStatus;
+}) {
+  if (!corrected || status === "정정") {
+    return null;
+  }
+  return <span className="badge badge--warn">정정</span>;
+}

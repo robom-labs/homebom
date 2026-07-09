@@ -13,7 +13,7 @@ import {
   type AlertKind,
 } from "@zoopzoopcall/core";
 import { Countdown } from "../components/Countdown";
-import { StatusBadge, TypeBadge } from "../components/StatusBadge";
+import { CorrectionBadge, StatusBadge, TypeBadge } from "../components/StatusBadge";
 import { PermissionBanner } from "../components/PermissionBanner";
 import { useNow } from "../hooks/useNow";
 import { notificationSupport, requestPermission } from "../notify/notifications";
@@ -93,7 +93,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
       <div className="detail__badges">
         <TypeBadge type={notice.type} />
         <StatusBadge status={status} />
-        {notice.corrected && status !== "정정" && <span className="badge badge--warn">정정</span>}
+        <CorrectionBadge corrected={notice.corrected} status={status} />
       </div>
       <h1 className="detail__title">{notice.houseName}</h1>
 

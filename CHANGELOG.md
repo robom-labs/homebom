@@ -2,6 +2,11 @@
 
 이 프로젝트는 [SemVer](https://semver.org/lang/ko/)를 따른다.
 
+## [0.1.1] - 2026-07-09
+
+### 변경
+- `정정` 배지 로직을 공용 `CorrectionBadge` 컴포넌트로 추출 — `NoticeCard`·`DetailScreen`에 중복돼 있던 표시 규칙(`corrected && 상태≠"정정"`)을 한 곳으로. 동작 동일. typecheck·build·core 테스트(44) 통과.
+
 ## [0.1.0] - 2026-07-08
 
 ### 추가

@@ -11,7 +11,7 @@ import {
   kstDateKey,
 } from "@zoopzoopcall/core";
 import { DdayStamp } from "./DdayStamp";
-import { StatusBadge, TypeBadge } from "./StatusBadge";
+import { CorrectionBadge, StatusBadge, TypeBadge } from "./StatusBadge";
 
 type Props = {
   notice: Notice;
@@ -60,7 +60,7 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
         <div className="card__badges">
           <TypeBadge type={notice.type} />
           <StatusBadge status={status} />
-          {notice.corrected && status !== "정정" && <span className="badge badge--warn">정정</span>}
+          <CorrectionBadge corrected={notice.corrected} status={status} />
         </div>
         {stamp && <DdayStamp label={stamp.label} tone={stamp.tone} />}
       </div>
