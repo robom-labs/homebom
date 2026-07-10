@@ -23,18 +23,23 @@ export async function showAppNotification(
   body: string,
   url: string,
   tag: string,
-): Promise<void> {
-  if (notificationSupport() !== "granted") return;
+): Promise<boolean> {
+  if (notificationSupport() !== "granted") return false;
   const icon = `${import.meta.env.BASE_URL}icons/icon-192.png`;
   const options: NotificationOptions = { body, tag, icon, data: { url } };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
     if (reg) {
       await reg.showNotification(title, options);
-      return;
+      return true;
     }
   } catch {
     // SW 미지원 환경은 아래 폴백을 쓴다.
   }
-  new Notification(title, options);
+  try {
+    new Notification(title, options);
+    return true;
+  } catch {
+    return false;
+  }
 }

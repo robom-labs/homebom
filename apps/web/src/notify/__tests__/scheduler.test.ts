@@ -1,7 +1,7 @@
-// collectPendingAlerts 순수함수 테스트. localStorage를 쓰는 collectDueAlerts/startAlertScheduler는 스코프 밖.
+// 알림 계산과 실제 표시 성공 여부에 따른 발송 기록을 검증한다.
 import { describe, expect, it } from "vitest";
 import type { Notice } from "@zoopzoopcall/core";
-import { collectPendingAlerts } from "../scheduler";
+import { collectPendingAlerts, deliverDueAlert } from "../scheduler";
 import type { NoticeSnapshotMap, SubMap } from "../../store/subscriptions";
 
 const makeNotice = (overrides: Partial<Notice> & { id: string }): Notice => ({
@@ -67,5 +67,36 @@ describe("collectPendingAlerts", () => {
 
     expect(alerts).toHaveLength(1);
     expect(alerts[0].id).toBe("N5:open:0");
+  });
+});
+
+describe("deliverDueAlert", () => {
+  const alert = {
+    id: "N1:open:0",
+    noticeId: "N1",
+    kind: "open" as const,
+    offsetMinutes: 0,
+    fireAt: T("2026-07-10T00:00:00Z"),
+    title: "접수 시작",
+    body: "지금 접수가 시작됐어요.",
+    url: "https://www.applyhome.co.kr",
+  };
+
+  it("알림 표시가 성공한 뒤에만 발송 완료로 기록한다", async () => {
+    const recorded: string[] = [];
+
+    const shown = await deliverDueAlert(alert, async () => true, (id) => recorded.push(id));
+
+    expect(shown).toBe(true);
+    expect(recorded).toEqual([alert.id]);
+  });
+
+  it("알림 표시가 실패하면 발송 완료로 기록하지 않는다", async () => {
+    const recorded: string[] = [];
+
+    const shown = await deliverDueAlert(alert, async () => false, (id) => recorded.push(id));
+
+    expect(shown).toBe(false);
+    expect(recorded).toEqual([]);
   });
 });

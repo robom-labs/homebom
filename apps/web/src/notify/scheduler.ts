@@ -5,6 +5,8 @@ import type { NoticeSnapshotMap, SubMap } from "../store/subscriptions";
 import { loadFired, markFired } from "../store/subscriptions";
 import { notificationSupport, showAppNotification } from "./notifications";
 
+const delivering = new Set<string>();
+
 /** 아직 오지 않은(예정된) 알림 전체를 시간순으로 모은다. */
 export function collectPendingAlerts(
   notices: Notice[],
@@ -38,6 +40,24 @@ export function collectDueAlerts(
   );
 }
 
+/** 실제 표시가 성공한 알림만 발송 완료로 기록한다. */
+export async function deliverDueAlert(
+  alert: NoticeAlert,
+  notify = showAppNotification,
+  record = markFired,
+): Promise<boolean> {
+  if (delivering.has(alert.id)) return false;
+  delivering.add(alert.id);
+  try {
+    const shown = await notify(alert.title, alert.body, alert.url, alert.id).catch(() => false);
+    if (!shown) return false;
+    record(alert.id);
+    return true;
+  } finally {
+    delivering.delete(alert.id);
+  }
+}
+
 /** 15초 간격 + 화면 복귀 시점에 도래 알림을 확인해 울린다. 반환값은 정리 함수다. */
 export function startAlertScheduler(
   getState: () => { notices: Notice[]; subs: SubMap; noticeSnapshots: NoticeSnapshotMap },
@@ -50,8 +70,7 @@ export function startAlertScheduler(
     if (notificationSupport() !== "granted") return;
     const { notices, subs, noticeSnapshots } = getState();
     for (const alert of collectDueAlerts(notices, subs, Date.now(), noticeSnapshots)) {
-      markFired(alert.id);
-      void showAppNotification(alert.title, alert.body, alert.url, alert.id);
+      void deliverDueAlert(alert);
     }
   };
   const interval = window.setInterval(check, 15_000);
