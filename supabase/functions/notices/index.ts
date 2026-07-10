@@ -8,22 +8,60 @@ const MODEL_OPERATION = "getRemndrLttotPblancMdl";
 const APPLY_HOME_URL = "https://www.applyhome.co.kr";
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const PER_PAGE = 500;
+/** 청약홈(odcloud) 업스트림 호출 타임아웃(ms). 초과 시 AbortController 로 요청을 중단한다. */
+const FETCH_TIMEOUT_MS = 8_000;
+// IP당 분당 허용 요청 수. 인스턴스 메모리 기반의 best-effort 제한이다 —
+// Edge Function 인스턴스가 여러 개 뜨거나 재시작되면 카운터가 공유·유지되지 않는다.
+// 플랫폼 차원(예: Supabase/게이트웨이 레벨)의 정식 rate limiting 설정은 사람 작업으로 남긴다.
+const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_BUCKETS = 10_000;
 const RECEIPT_NOTE =
   "청약홈 신청 가능 시간은 영업일 09:00~17:30 기준입니다. 공고별 정정·별도 조건은 모집공고 원문을 확인하세요.";
 
 type RawItem = Record<string, unknown>;
 type ApiPage = { data?: RawItem[]; totalCount?: number; currentCount?: number; error?: string };
 
+// 최근 성공 응답. TTL 안에서는 그대로 서빙하고(기존 캐시 동작),
+// TTL이 지나도 지우지 않고 남겨서 업스트림 장애 시 stale-if-error 폴백으로 쓴다.
 let cache: { at: number; body: string } | null = null;
 
-function headers(status = 200): ResponseInit {
+// IP별 요청 카운터(인스턴스 로컬, best-effort — 위 RATE_LIMIT_MAX 주석 참고).
+const rateBuckets = new Map<string, { windowStart: number; count: number }>();
+
+function headers(status = 200, extra: Record<string, string> = {}): ResponseInit {
   return {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
+      ...extra,
     },
   };
+}
+
+/** x-forwarded-for(프록시 경유 시 첫 번째 값) 기준 클라이언트 IP. 없으면 "unknown". */
+function clientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim() || "unknown";
+  return req.headers.get("cf-connecting-ip") ?? "unknown";
+}
+
+/** true 를 반환하면 이번 요청을 429로 거절한다. */
+function isRateLimited(ip: string, now: number): boolean {
+  // 버킷이 비정상적으로 커지면 만료된 창부터 정리한다(메모리 보호).
+  if (rateBuckets.size > RATE_LIMIT_MAX_BUCKETS) {
+    for (const [key, bucket] of rateBuckets) {
+      if (now - bucket.windowStart >= RATE_LIMIT_WINDOW_MS) rateBuckets.delete(key);
+    }
+  }
+  const bucket = rateBuckets.get(ip);
+  if (!bucket || now - bucket.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    rateBuckets.set(ip, { windowStart: now, count: 1 });
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > RATE_LIMIT_MAX;
 }
 
 function todayKst(): string {
@@ -83,7 +121,20 @@ async function fetchApiPage(operation: string, serviceKey: string, page: number)
   url.searchParams.set("perPage", String(PER_PAGE));
   url.searchParams.set("returnType", "JSON");
   url.searchParams.set("serviceKey", serviceKey);
-  const res = await fetch(url);
+  // 업스트림이 응답하지 않으면 FETCH_TIMEOUT_MS 후 중단해 함수 전체가 매달리지 않게 한다.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(`청약홈 API 응답이 ${FETCH_TIMEOUT_MS / 1000}초 안에 오지 않아 중단했습니다.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   const body = await res.text();
   if (!res.ok) throw new Error(`청약홈 API ${res.status}: ${body.slice(0, 180)}`);
   const json = JSON.parse(body) as ApiPage;
@@ -171,7 +222,14 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string) {
   };
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  if (isRateLimited(clientIp(req), Date.now())) {
+    return new Response(
+      JSON.stringify({ error: "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요." }),
+      headers(429, { "retry-after": "60" }),
+    );
+  }
+
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
     return new Response(cache.body, headers());
   }
@@ -202,6 +260,11 @@ Deno.serve(async () => {
     cache = { at: Date.now(), body };
     return new Response(body, headers());
   } catch (err) {
+    // stale-if-error: 업스트림 장애 시, TTL이 지난 마지막 성공 응답이 남아 있으면
+    // 502 대신 그 복사본을 X-Data-Stale: 1 마커와 함께 서빙한다(응답 형태 동일).
+    if (cache) {
+      return new Response(cache.body, headers(200, { "x-data-stale": "1" }));
+    }
     const message = err instanceof Error ? err.message : "청약홈 공고를 불러오지 못했습니다.";
     return new Response(JSON.stringify({ error: message }), headers(502));
   }

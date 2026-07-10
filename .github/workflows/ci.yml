@@ -21,5 +21,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+        env:
+          # deploy-pages.yml 과 동일한 공개 실공고 엔드포인트. 비밀값이 아니며,
+          # CI가 프로덕션과 같은 번들 구성을 검증하도록 맞춘다.
+          VITE_NOTICES_URL: https://neqjmxaneibobpedgsnl.functions.supabase.co/notices
       - name: base path 유지 확인
         run: grep -q '/zoopzoopcall/assets/' apps/web/dist/index.html

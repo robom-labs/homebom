@@ -4,6 +4,9 @@ import type { Notice } from "@zoopzoopcall/core";
 
 export type NoticeSource = "live" | "not-connected";
 
+/** 요청이 이 시간 안에 응답하지 않으면 중단하고 에러 상태로 전환한다(무한 로딩 방지). */
+const FETCH_TIMEOUT_MS = 10_000;
+
 export function useNotices() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [source, setSource] = useState<NoticeSource>("not-connected");
@@ -21,8 +24,10 @@ export function useNotices() {
       setLoading(false);
       return;
     }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch(liveUrl);
+      const res = await fetch(liveUrl, { signal: controller.signal });
       const data = (await res.json()) as Notice[] | { error?: string };
       if (!res.ok || !Array.isArray(data)) {
         throw new Error(Array.isArray(data) ? `HTTP ${res.status}` : data.error || `HTTP ${res.status}`);
@@ -32,8 +37,16 @@ export function useNotices() {
     } catch (err) {
       setNotices([]);
       setSource("not-connected");
-      setError(err instanceof Error ? err.message : "실공고를 불러오지 못했습니다.");
+      const timedOut = controller.signal.aborted;
+      setError(
+        timedOut
+          ? "실공고 응답이 10초 안에 오지 않아 요청을 중단했습니다. 잠시 후 다시 시도해 주세요."
+          : err instanceof Error
+            ? err.message
+            : "실공고를 불러오지 못했습니다.",
+      );
     } finally {
+      window.clearTimeout(timeout);
       setLoading(false);
     }
   }, []);

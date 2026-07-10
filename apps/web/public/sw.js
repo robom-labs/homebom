@@ -1,5 +1,6 @@
 // 줍줍콜 서비스워커. 앱 셸 캐시(오프라인)와 알림 클릭 처리를 담당한다.
-const CACHE = "zzc-v1";
+// 캐시 이름을 올리면 activate 단계에서 이전 버전 캐시(zzc-v1 등)가 자동 삭제된다.
+const CACHE = "zzc-v2";
 
 self.addEventListener("install", () => {
   self.skipWaiting();

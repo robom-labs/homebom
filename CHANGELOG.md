@@ -2,6 +2,33 @@
 
 이 프로젝트는 [SemVer](https://semver.org/lang/ko/)를 따른다.
 
+## [0.1.4] - 2026-07-10
+
+유지보수·안정화 릴리스. 기능 변화 없이 버그 재발 방지와 장애 내성을 강화했다.
+
+### 변경
+- **버전 통일**: 루트·`apps/web`·`packages/core` 의 package.json 버전이 0.1.3 / 0.1.1 / 0.1.0 으로 제각각이던 것을 모두 **0.1.4** 로 통일했다. 앞으로는 세 파일을 같은 버전으로 유지한다.
+- **CI 빌드 환경 일치**: CI(`ci.yml`) 빌드 단계에 배포(`deploy-pages.yml`)와 동일한 공개 실공고 엔드포인트(`VITE_NOTICES_URL`)를 명시해, CI가 프로덕션과 같은 번들 구성을 검증하도록 맞췄다. (공개 URL이며 비밀값 아님)
+- **서비스워커 캐시 갱신**: 캐시 이름 `zzc-v1` → `zzc-v2`. activate 시 이전 버전 캐시는 기존 로직대로 자동 삭제된다(네트워크 우선 동작 동일).
+
+### 추가
+- **스케줄러 회귀 테스트 6건** (`apps/web/src/notify/__tests__/scheduler.regression.test.ts`):
+  - 알림 권한이 `granted` 가 아닐 때 `check` 가 아무것도 fired 로 기록하지 않는지(v0.1.0 영구 억제 버그 재발 방지) + granted 대조군.
+  - `collectDueAlerts` 의 6시간 유예창 경계(5시간 59분 경과 = 수집, 6시간 1분 경과 = 폐기)와 이미 fired 된 알림 제외.
+  - `delivering` 인플라이트 가드: 같은 알림을 동시에 두 번 전달 시도해도 한 번만 표시·기록.
+- **자가개선 워크플로** (`.github/workflows/daily-self-improve.yml`): 하루 2회(KST 06:00/18:00) Claude가 작은 개선 1개를 draft PR 로 올린다. `ANTHROPIC_API_KEY` 시크릿이 없으면 한국어 안내와 함께 즉시 실패한다(등록은 사람 작업). merge 는 항상 사람이 한다.
+
+### 안정화
+- **Edge Function 장애 내성** (`supabase/functions/notices/index.ts` — 배포는 사람이 수동으로):
+  - stale-if-error: 청약홈 업스트림 장애 시 502 대신 마지막 성공 응답을 `X-Data-Stale: 1` 헤더와 함께 서빙.
+  - 업스트림 호출에 AbortController 8초 타임아웃 추가.
+  - IP당 분당 30회 인메모리 rate limiter(인스턴스별 best-effort; 플랫폼 차원의 정식 제한은 사람 작업).
+  - 공고 정규화 로직·응답 형태는 무변경.
+- **웹 무한 로딩 방지** (`apps/web/src/hooks/useNotices.ts`): 실공고 요청에 10초 AbortController 타임아웃을 걸어, 응답이 멈추면 로딩이 아니라 에러 상태로 전환된다.
+
+### 정리
+- **회장님 승인 하에** 낡은 스냅샷 디렉터리 삭제: `zoop-holdings/`(구 지주회사 저장소 복사본, VERSION 0.2.0 — 실제 저장소는 runnerpyrri-lgtm/Zoop-holdings), `docs/zoop-holdings/`(구 청사진 스냅샷). 앱 코드가 참조하지 않음을 grep 으로 확인했다.
+
 ## [0.1.3] - 2026-07-10
 
 ### 수정

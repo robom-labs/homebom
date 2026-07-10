@@ -1,0 +1,67 @@
+# 줍줍콜 자가개선 워크플로. 하루 2회(KST 06:00 / 18:00) Claude가 작은 개선 1개를
+# draft PR로 올린다. merge는 항상 사람이 한다. 자동 배포·main push 없음.
+name: Daily Self-Improve
+
+on:
+  schedule:
+    # UTC 09:00 / 21:00 = KST 18:00 / 다음날 06:00 (하루 2회)
+    - cron: "0 9,21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: daily-self-improve
+  cancel-in-progress: false
+
+jobs:
+  self-improve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ANTHROPIC_API_KEY 확인 (없으면 즉시 실패)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY 시크릿이 비어 있습니다. Settings > Secrets and variables > Actions 에서 등록 (사람 작업)"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Claude 자가개선 실행
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 25"
+          prompt: |
+            너는 줍줍콜(zoopzoopcall) 자가개선 담당이다. 이번 실행에서 딱 1개의 작은 개선만 수행한다.
+
+            허용되는 개선 종류 (이 중 하나만 고른다):
+            - 버그 수정
+            - 테스트 보강
+            - 문서 정확화
+            - 접근성 개선
+
+            절대 금지 (하나라도 해당하면 중단):
+            - main 에 직접 push
+            - base path `/zoopzoopcall/` 변경 (vite.config.ts 의 base 포함)
+            - 시크릿·배포 설정 변경 (.github/workflows 의 배포 관련, supabase secrets 등)
+            - 유료 외부 API 호출 추가
+
+            작업 절차:
+            1. 저장소를 살펴 작은 개선 1개를 고른다.
+            2. 새 브랜치 `claude/self-improve-<날짜-시간>` (예: claude/self-improve-20260710-0900)에서 작업한다.
+            3. `pnpm typecheck && pnpm test && pnpm build` 가 모두 통과해야 한다. 실패 상태로는 PR을 만들지 않는다.
+            4. 버전을 PATCH 로 올리고(루트·apps/web·packages/core 의 package.json 동일 버전), CHANGELOG.md 에 한국어 항목을 추가한다.
+            5. draft PR 을 딱 1개 만든다. merge 는 사람이 한다.
+
+            PR 설명은 비전공자(회장님)가 읽는다. 한국어로 다음 4가지를 쉬운 말로 쓴다:
+            - 무엇을 바꿨는지
+            - 왜 바꿨는지
+            - 사용자에게 무엇이 좋아지는지
+            - 위험 요소와 확인 방법
