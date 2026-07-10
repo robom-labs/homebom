@@ -1,0 +1,49 @@
+# main 에 머지되면 자동으로 빌드해 GitHub Pages(gh-pages 브랜치)로 배포한다.
+# 지금까지는 수동(pnpm build → gh-pages 로 push)이라 머지해도 사이트에 반영되지 않았다 — 이 워크플로가 그 갭을 메운다.
+# base path 는 vite.config.ts 의 base: "/zoopzoopcall/" 가 그대로 유지되므로 배포 URL 이 바뀌지 않는다.
+name: Deploy zoopzoopcall Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (base "/zoopzoopcall/" 유지)
+        run: pnpm -r build
+
+      - name: base path 유지 검증 (깨졌으면 배포 중단)
+        run: grep -q '/zoopzoopcall/assets/' apps/web/dist/index.html
+
+      - name: Deploy apps/web/dist to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: apps/web/dist
