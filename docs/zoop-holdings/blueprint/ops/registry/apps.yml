@@ -1,0 +1,42 @@
+# 앱 목록 단일 소스. 앱 추가 = 여기에 한 블록 + ops/state·changelog 파일 생성.
+# 팀·워크플로·가드레일은 이 파일만 보고 확장된다.
+
+apps:
+  - id: zoopzoopcall
+    name: 줍줍콜
+    status: live                # live | stub | paused | archived
+    version: 0.1.0
+    repo: runnerpyrri-lgtm/zoopzoopcall
+    base_path: /zoopzoopcall/    # ★ 변경 금지 (가드레일이 지킴)
+    deploy: github-pages         # gh-pages 브랜치, 수동 push
+    stack: pnpm + vite + react(PWA) + supabase(deno)
+    marketing_tone: "청약 무순위/줍줍 알림 · 마감 긴급성 + 무료·간편"
+
+  - id: runningcall
+    name: runningcall
+    status: stub
+    version: 0.0.0
+    repo: runnerpyrri-lgtm/runningcall
+    base_path: /runningcall/
+    deploy: github-pages
+    stack: TBD
+    marketing_tone: "출시 티저 · 대기자 모으기"
+
+  - id: pushrun
+    name: pushrun
+    status: stub
+    version: 0.0.0
+    repo: runnerpyrri-lgtm/pushrun
+    base_path: /pushrun/
+    deploy: github-pages
+    stack: TBD
+    marketing_tone: "출시 티저 · 대기자 모으기"
+
+# 새 앱 추가 예:
+#  - id: newapp
+#    name: 새 앱
+#    status: stub
+#    version: 0.0.0
+#    repo: runnerpyrri-lgtm/newapp
+#    base_path: /newapp/
+#    deploy: github-pages

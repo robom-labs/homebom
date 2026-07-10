@@ -1,0 +1,40 @@
+# 매일 홍보 콘텐츠 공장 — 오늘 앱의 다채널 콘텐츠팩을 생성해 PR로 쌓는다.
+# 만드는 건 자동, 외부 게시는 사람 승인. (스팸 자동게시 금지 — playbooks/marketing-channels.md)
+name: Daily Marketing
+
+on:
+  schedule:
+    - cron: "30 0 * * *"     # 09:30 KST — 데일리 런 직후
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: daily-marketing
+  cancel-in-progress: false
+
+jobs:
+  marketing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate content pack (Claude Code)
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            너는 zoop-holdings의 홍보·성장팀이다.
+            .claude/agents/growth-marketer.md 와 ops/playbooks/marketing-channels.md 를 따른다.
+            오늘의 콘텐츠팩을 만들어라:
+            1) apps.yml 로 오늘 홍보할 앱 1개 선택(개발과 다른 앱이어도 됨 — 로테이션)
+            2) ops/content/<날짜>/<앱>/ 아래 채널별 초안 생성:
+               - youtube-shorts.md   (쇼츠 대본 + 훅 3개 + 썸네일 문구)
+               - instagram.md        (카드뉴스 6컷 문구 + 캡션 + 해시태그)
+               - blog-seo.md         (검색 유입용 블로그 글 + 타깃 키워드)
+               - community-replies.md(관련 커뮤니티 글에 달 "도움되는" 답글 초안 + 출처 링크칸)
+            3) 각 초안 맨 위에 [상태: 게시대기 / 승인자: ____ / 채널: ____] 체크박스
+            4) 절대 외부에 자동 게시하지 않는다. PR(draft)까지만.
+          # 실제 게시는 사람이 PR을 보고 복사해 올리거나, 승인 후 공식 API 워크플로로.

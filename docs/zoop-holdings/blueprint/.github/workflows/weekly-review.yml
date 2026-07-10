@@ -1,0 +1,29 @@
+# 주 1회(월요일 09시 KST) — 개선 엔진: 감독·개선연구·릴리즈.
+# 회사가 "스스로 좋아지는" 루프. 산출물은 리포트 + 프롬프트 수정 제안 PR.
+name: Weekly Review
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"     # 매주 월요일 00:00 UTC = 09:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Weekly management review (Claude Code)
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            너는 zoop-holdings의 개선 엔진이다. 순서대로 subagent를 돌려라.
+            1) supervisor: 지난주 PR 머지율/재작업률/실패 반복을 보고
+               ops/scorecards/agent-performance.md 갱신 + 고칠 agent 프롬프트 목록 작성
+            2) upgrader(R&D): 각 앱의 다음 업그레이드/리팩토링 후보를 ROADMAP에 제안
+            3) release-manager: 이번 주 릴리스 후보와 버전/CHANGELOG 검토
+            결과를 요약 리포트로 만들고, 프롬프트 수정이 있으면 draft PR을 연다.

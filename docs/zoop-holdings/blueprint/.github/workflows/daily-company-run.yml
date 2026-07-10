@@ -1,0 +1,50 @@
+# 매일 09시(KST) 회사 운영 — 실행 4팀이 앱 1개를 개선하고 PR을 연다.
+# Claude는 브랜치 push + PR 생성까지만. main merge는 사람이 한다.
+name: Daily Company Run
+
+on:
+  schedule:
+    - cron: "0 0 * * *"      # 00:00 UTC = 09:00 KST
+  workflow_dispatch:          # 수동 실행 버튼
+
+permissions:
+  contents: write             # 데일리 브랜치 push
+  pull-requests: write        # PR 생성
+  # 그 외 권한은 주지 않는다(최소권한). secret/배포 권한 없음.
+
+concurrency:
+  group: daily-company-run
+  cancel-in-progress: false
+
+jobs:
+  company-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 오늘 작업할 앱을 apps.yml + 점수표로 고르는 건 오케스트레이터가 판단.
+      - name: Run the company (Claude Code)
+        # ⚠️ action 이름/입력은 공식 문서 기준으로 맞출 것.
+        #    (anthropics/claude-code-action — 최신 major 태그 사용)
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 마스터(오케스트레이터)를 진입점으로. 나머지 팀은 마스터가 subagent로 호출.
+          prompt: |
+            너는 zoop-holdings의 마스터(오케스트레이터)다.
+            .claude/agents/ceo-orchestrator.md 규칙을 그대로 따른다.
+            오늘의 데일리 런을 수행하라:
+            1) ops/registry/apps.yml 와 ops/scorecards/app-priority.md 로 오늘 앱 1개 선택
+            2) planner → builder → inspector → recorder 순으로 subagent 호출
+            3) 변경은 선언한 파일 범위 안에서만. 하루 = 앱1·목표1·PR1.
+            4) 위험 점수가 높으면 코드 대신 제안서 PR만 만든다.
+            5) 브랜치 claude/daily-$(date +%F) 로 커밋하고 draft PR을 연다.
+          # claude_args 로 허용 도구/모델 제한 가능(문서 참고).
+
+      # 위 액션이 PR을 직접 열지 않는 구성이라면 아래로 대체:
+      # - uses: peter-evans/create-pull-request@v6
+      #   with:
+      #     branch: claude/daily-${{ github.run_id }}
+      #     draft: true
+      #     title: "daily: 오늘의 개선"
+      #     labels: automated,daily
