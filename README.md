@@ -1,8 +1,10 @@
-# 줍줍콜
+# 청약봄
 
 무순위 · 잔여세대 · 취소후재공급 청약(줍줍) 접수가 **열리고 닫히는 순간**을, 내 조건에 맞는 것만 폰으로 미리 울려주는 알림 서비스.
 
-**바로 열기: https://runnerpyrri-lgtm.github.io/zoopzoopcall/**
+로봄의 청약 기회 알림 앱입니다. 기존 줍줍콜의 기능과 알림 설정을 그대로 이어받습니다.
+
+**바로 열기: https://robom-labs.github.io/homebom/**
 
 폰에서 홈 화면에 추가하면 앱처럼 쓸 수 있습니다 (안드로이드 크롬: 메뉴 → 홈 화면에 추가 / 아이폰 사파리: 공유 → 홈 화면에 추가).
 
@@ -23,7 +25,7 @@
 ## 저장소 구조
 
 ```
-zoopzoopcall/
+homebom/
   packages/core/        # 도메인 순수함수 (상태판정·D-day·알림계산·정규화) + Vitest 테스트
   apps/web/             # React + Vite PWA (목록/상세/내 알림/안내, 로컬 알림 스케줄러)
   supabase/functions/   # 청약홈 API 프록시 (서비스키 서버 보관)

@@ -86,7 +86,7 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
     <div className="screen">
       <header className="masthead">
         <div className="masthead__row">
-          <h1 className="masthead__brand">줍줍콜</h1>
+          <h1 className="masthead__brand">청약봄</h1>
           <span className={`source source--${source}`}>
             {source === "live" ? "실공고" : "연결 필요"}
           </span>
