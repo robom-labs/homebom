@@ -2,7 +2,7 @@
 
 ## 웹앱 (GitHub Pages) — 현재 배포 경로
 
-- 공개 URL: https://runnerpyrri-lgtm.github.io/zoopzoopcall/
+- 공개 URL: https://robom-labs.github.io/homebom/
 - 소스는 `main`, 배포 산출물은 `gh-pages` 브랜치(root). Pages 설정: Deploy from a branch → gh-pages.
 
 재배포 절차:
@@ -12,11 +12,11 @@ pnpm build                       # packages/core 검사 + 아이콘 생성 + app
 cd apps/web/dist
 git init && git add -A
 git commit -m "deploy"
-git push -f https://github.com/runnerpyrri-lgtm/zoopzoopcall.git HEAD:gh-pages
+git push -f https://github.com/robom-labs/homebom.git HEAD:gh-pages
 ```
 
 - SPA 라우팅은 HashRouter라 404 우회가 필요 없다.
-- `vite.config.ts`의 `base: "/zoopzoopcall/"`가 저장소 이름과 일치해야 한다. 저장소 이름을 바꾸면 같이 바꾼다.
+- `vite.config.ts`의 `base: "/homebom/"`가 저장소 이름과 일치해야 한다.
 
 ## 실데이터 연결 (사람 작업 + 함수 배포)
 

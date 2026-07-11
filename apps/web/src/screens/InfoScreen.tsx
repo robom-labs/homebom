@@ -9,7 +9,7 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
       </header>
 
       <section className="info-card">
-        <h2>줍줍콜은</h2>
+        <h2>청약봄은</h2>
         <p>
           무순위·잔여세대·취소후재공급 청약 접수 시작과 마감 시간을 챙기기 위한 알림 서비스입니다.
         </p>
@@ -51,14 +51,14 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
         <ul>
           <li>청약홈 신청 가능 시간은 영업일 09:00~17:30 기준입니다.</li>
           <li>접수 일정은 정정 공고로 바뀔 수 있어요. 신청 전 모집공고 원문을 확인하세요.</li>
-          <li>줍줍콜은 당첨 가능성이나 자격을 판정하지 않습니다.</li>
+          <li>청약봄은 당첨 가능성이나 자격을 판정하지 않습니다.</li>
           <li>현재 알림은 앱이 실행 중일 때 동작합니다. 중요한 일정은 청약홈에서도 함께 확인하세요.</li>
         </ul>
       </section>
 
       <p className="fineprint">
-        줍줍콜 ·{" "}
-        <a href="https://github.com/runnerpyrri-lgtm/zoopzoopcall" target="_blank" rel="noreferrer">
+        청약봄 ·{" "}
+        <a href="https://github.com/robom-labs/homebom" target="_blank" rel="noreferrer">
           GitHub
         </a>
       </p>

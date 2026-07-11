@@ -1,4 +1,4 @@
-# 줍줍콜 PROJECT_SPEC
+# 청약봄 PROJECT_SPEC
 
 ## 한 줄 정의
 

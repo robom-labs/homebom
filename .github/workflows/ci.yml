@@ -26,4 +26,4 @@ jobs:
           # CI가 프로덕션과 같은 번들 구성을 검증하도록 맞춘다.
           VITE_NOTICES_URL: https://neqjmxaneibobpedgsnl.functions.supabase.co/notices
       - name: base path 유지 확인
-        run: grep -q '/zoopzoopcall/assets/' apps/web/dist/index.html
+        run: grep -q '/homebom/assets/' apps/web/dist/index.html
