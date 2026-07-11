@@ -188,3 +188,72 @@
 - 타입체크 통과.
 - 테스트 통과: core 44개, web 12개.
 - 프로덕션 빌드와 `/homebom/` base path 검사 통과.
+
+---
+
+# 라운드 2 — 목록 masthead 접근성 (agent/mobile-list-masthead)
+
+## 점검 기준
+
+- 기준 저장소: `robom-labs/homebom`. 기준 브랜치: `agent/mobile-alert-access`(Draft PR #14) 위에 쌓은 `agent/mobile-list-masthead`.
+- PR #14가 상세 화면 알림 접근성(순서 재배치·권한 정합성·44px 스위치·목록 선행 권한배너 숨김)을 이미 해결한 상태에서, 목록(첫 진입) 화면의 남은 세로 점유 문제를 다룬다.
+- 모바일 실측(#14 적용 기준, VITE 개발 서버 + Chromium 실측):
+  - 360×800 / 320×568 목록에서 masthead 높이 124px, 첫 공고 카드 top 322px.
+  - 상세 알림 카드 top 422px, 스위치 58×44(#14 유지). 가로 넘침 없음.
+
+## 리드(Claude Code) 발견 및 제안
+
+- 문제와 근거: `ListScreen.tsx`의 masthead(브랜드 "청약봄" 32px + source 배지 + 태그라인 문단)가 세로 124px를 차지해, #14 적용 후에도 핵심 행동(공고 카드 탭)이 top 322px에 위치. 320×568에서는 카드 앞 스택이 화면의 57%.
+- 사용자 영향도: 중간. 매일 여닫는 알림앱 특성상 첫 진입 시 카드 도달이 늦어지는 누적 불편.
+- 모바일 터치·스크롤 편의성 영향: 첫 카드를 위로 올려 첫 진입 순간의 스크롤 부담을 낮춤. 터치 타깃은 이미 44px라 이 변경으로 바뀌지 않음.
+- 구현 난이도·회귀 위험: 낮음. `styles.css` 로컬 CSS 값 조정뿐. `packages/core`·라우팅·`/homebom/` base path 무관.
+- 초기 제안: `.masthead` padding 18px→10px, `.masthead__tagline` 15px→13.5px.
+
+## 담당자 독립 분석 및 교차검토
+
+### Architect
+- 초기 스택: masthead → error → PermissionBanner → sticky FilterBar → `.group`(margin 22px) → 카드. masthead가 유일한 순수 마케팅 블록이라 감축 대상 지목은 타당.
+- 반박·보완: 22px는 부족(300px도 568px의 53%). 더 큰 저위험 지렛대는 `.group { margin-top: 22px }`이며, group 제목 "지금 접수중 N"은 sticky 세그먼트 탭과 정보가 중복. 태그라인은 `word-break: keep-all`로 320px에서 2줄 접힘 → 문구 축약이 폰트 축소보다 견고. base path 불변 재확인.
+- 판정: 조건부 채택. group margin 축소는 저위험이나 제목 제거·정보구조 변경은 별도 판단.
+
+### Planner
+- 오늘의 작업 1건 = 목록 masthead 세로 압축(CSS만). 합격 기준: 첫 카드 top ≤ 300px @360, masthead ≤ 102px(참고치), 320/360 가로 넘침·태그라인 손상 없음, 다크/reduced-motion 동일.
+- 반박·보완: FilterBar가 `sticky top:0`이라 masthead 압축 효과는 "첫 페인트 한정" — PR 본문에 과대포장 금지. px 목표보다 "첫 카드 top" 기준이 견고.
+- 판정: 채택, 이 1건으로 오늘 범위 확정 가능(별개 MINOR).
+
+### Growth Marketer
+- 태그라인은 앱을 설명하는 유일 문구라 첫 방문 신뢰에 기여 → 과축소·삭제 금지. 재방문 사용자는 카드가 먼저 보여야 함.
+- 반박·보완: "태그라인 무조건 축소"는 보류. 문구 축약 또는 `text-wrap: balance`로 2줄 랩을 보기 좋게 유지 권고. 태그라인 존치.
+- 판정: 조건부 채택(첫 카드 300px 목표 OK, 태그라인 존치).
+
+### Inspector
+- diff는 `styles.css` 1개뿐, #14 변경 미훼손. base path `/homebom/` 유지, secret/Supabase/사용자데이터/lockfile 무변경.
+- typecheck PASS, test 56 PASS(core 44 + web 12), build PASS.
+- 반박·보완: 이 저장소엔 시각 회귀 테스트가 부재 → 360/390 + 태그라인 2줄 랩 상태를 스크린샷으로 수동 확인 후 merge 권고.
+- 판정: 통과(모든 게이트 PASS, 금지선 무위반).
+
+## 최종 리드 판단
+
+### 채택
+1. `.masthead` padding 18px 0 6px → 10px 0 4px.
+2. `.masthead__tagline` margin-top 4→2px, font-size 15→13.5px, line-height 1.35, `text-wrap: balance`(태그라인 문구·존치는 그대로, Growth 의견 수용).
+3. `.group` margin-top 22px → 14px(Architect의 저위험 지렛대. 제목은 존치해 정보구조 불변, Architect·Planner 의견 절충).
+
+### 보류/제외
+- group 제목 축약·제거, brand 32→28px: 정보구조/브랜드 변경이라 이번 범위 제외(근거 없는 장식 변경 방지).
+- 세션 2회차부터 태그라인 접기 등 재방문 최적화: 별도 MINOR로 분리.
+- 시각 회귀 자동화(스냅샷 CI): 인프라 범위가 커 후속으로 분리, 이번엔 수동 다중 뷰포트로 대체.
+
+### 합격 기준 및 실측 결과
+
+| 화면 | 구현 전(#14) | 구현 후 | 결과 |
+| --- | ---: | ---: | --- |
+| 360×800 첫 카드 top | 322px | 292px | 30px 상향 |
+| 320×568 첫 카드 top | 322px | 292px | 30px 상향 |
+| masthead 높이 | 124px | 102px | 22px 축소 |
+| 상세 알림 카드 top | 422px | 422px | #14 유지(불변) |
+| 스위치 | 58×44 | 58×44 | #14 유지(불변) |
+
+- 첫 카드 top ≤ 300px @360 충족(292px). 320/360/390 가로 넘침 없음. 태그라인 2줄 정상 렌더(잘림 없음, text-wrap:balance로 균형).
+- typecheck PASS, test 56 PASS(core 44 + web 12), 프로덕션 build PASS, dist가 `/homebom/` base 유지.
+- 효과 범위: FilterBar가 sticky이므로 개선은 첫 진입 페인트에 한정(과대포장하지 않음).

@@ -125,8 +125,9 @@ a {
 }
 
 /* ---- 마스트헤드 ---- */
+/* 모바일 첫 화면에서 공고 카드(핵심 행동)를 더 빨리 보여주려고 세로 높이를 최소화한다. */
 .masthead {
-  padding: 18px 0 6px;
+  padding: 10px 0 4px;
 }
 
 .masthead__row {
@@ -159,9 +160,12 @@ a {
 }
 
 .masthead__tagline {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--ink-soft);
-  font-size: 15px;
+  font-size: 13.5px;
+  line-height: 1.35;
+  /* 좁은 화면(320px)에서 태그라인이 두 줄로 접힐 때 줄 길이를 고르게 만든다. */
+  text-wrap: balance;
 }
 
 .source {
@@ -355,8 +359,9 @@ a {
 }
 
 /* ---- 그룹/섹션 ---- */
+/* 목록 첫 진입에서 공고 카드를 조금 더 위로 올리려고 상단 여백을 줄인다(제목은 유지). */
 .group {
-  margin-top: 22px;
+  margin-top: 14px;
 }
 
 .group__title {
