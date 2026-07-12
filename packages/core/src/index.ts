@@ -21,6 +21,8 @@ export {
   formatHouseTypeLabel,
   inferHousingCategory,
 } from "./notice/housing";
+export { enrichNoticeWithComplexProfile, findComplexProfile } from "./notice/complexProfiles";
+export type { ComplexProfile } from "./notice/complexProfiles";
 export {
   KST_TZ,
   kstDateKey,

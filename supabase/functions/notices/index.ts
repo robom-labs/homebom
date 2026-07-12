@@ -22,6 +22,18 @@ const RECEIPT_NOTE =
 type RawItem = Record<string, unknown>;
 type ApiPage = { data?: RawItem[]; totalCount?: number; currentCount?: number; error?: string };
 
+// 공개 분양자료를 대조한 총세대수다. core의 complexProfiles.ts와 같은 값을 유지한다.
+const COMPLEX_PROFILES = [
+  { houseName: "대방역 여의도 더로드캐슬", addressToken: "신길동 449-11", totalHouseholdCount: 46, sourceUrl: "https://www.smilebunyang.com/yeouido-the-road-castle", verifiedAt: "2026-07-12" },
+  { houseName: "루원시티 SK 리더스뷰", addressToken: "가정로 437", totalHouseholdCount: 1789, sourceUrl: "https://www.skview.co.kr/html/info/?dp1=const&dp2=constRate&idx=230&month=1&pg=2&year=2022", verifiedAt: "2026-07-12" },
+  { houseName: "오정 해모로 스마트시티", addressToken: "오정동 613", totalHouseholdCount: 200, sourceUrl: "https://www.wikitree.co.kr/articles/1138871", verifiedAt: "2026-07-12" },
+  { houseName: "힐스테이트 앞산 센트럴", addressToken: "대덕로 162", totalHouseholdCount: 345, sourceUrl: "https://www.mss.go.kr/common/board/Download.do?bcIdx=1029213&cbIdx=253&streFileNm=5b939e30-e4bf-49a6-81ad-f8098cb15fc6.pdf", verifiedAt: "2026-07-12" },
+  { houseName: "힐스테이트 시흥더클래스", addressToken: "대야동", totalHouseholdCount: 430, sourceUrl: "https://siheunghillstate.co.kr/", verifiedAt: "2026-07-12" },
+  { houseName: "청계 노르웨이숲", addressToken: "황학동", totalHouseholdCount: 404, sourceUrl: "https://www.khba.or.kr/user/isale/isaleInfo.do?busiResuSeq=3&memSeq=2011-0784", verifiedAt: "2026-07-12" },
+  { houseName: "수원역 아너스빌 타임원", addressToken: "평동 135-1", totalHouseholdCount: 114, sourceUrl: "https://www.honorsville.co.kr/estate/sale/list", verifiedAt: "2026-07-12" },
+  { houseName: "호반써밋 풍무Ⅱ", addressToken: "사우동 527-1", totalHouseholdCount: 961, sourceUrl: "https://www.wikitree.co.kr/articles/1139229", verifiedAt: "2026-07-12" },
+];
+
 // 최근 성공 응답. TTL 안에서는 그대로 서빙하고(기존 캐시 동작),
 // TTL이 지나도 지우지 않고 남겨서 업스트림 장애 시 stale-if-error 폴백으로 쓴다.
 let cache: { at: number; body: string } | null = null;
@@ -89,6 +101,19 @@ function normalizeYmd(value: unknown): string | null {
 function text(value: unknown): string | undefined {
   const out = String(value ?? "").trim();
   return out || undefined;
+}
+
+function normalizeHouseName(value: string): string {
+  return value.replace(/\([^)]*\)/g, "").replace(/\s+/g, "").trim();
+}
+
+function findComplexProfile(houseName: string, address?: string) {
+  if (!address) return undefined;
+  const normalizedName = normalizeHouseName(houseName);
+  return COMPLEX_PROFILES.find(
+    (profile) =>
+      normalizeHouseName(profile.houseName) === normalizedName && address.includes(profile.addressToken),
+  );
 }
 
 function urlText(value: unknown): string | undefined {
@@ -183,6 +208,7 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string) {
 
   const manageNo = String(raw.HOUSE_MANAGE_NO ?? "");
   const pblancNo = String(raw.PBLANC_NO ?? "");
+  const profile = findComplexProfile(houseName, text(raw.HSSPLY_ADRES));
   const modelSummaries = normalizeModels(models);
   const prices = modelSummaries
     .map((model) => model.priceMax)
@@ -201,6 +227,9 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string) {
     regionCode: text(raw.SUBSCRPT_AREA_CODE),
     zipCode: text(raw.HSSPLY_ZIP),
     address: text(raw.HSSPLY_ADRES),
+    totalHouseholdCount: profile?.totalHouseholdCount,
+    totalHouseholdSourceUrl: profile?.sourceUrl,
+    totalHouseholdVerifiedAt: profile?.verifiedAt,
     supplyCount: positiveNumber(raw.TOT_SUPLY_HSHLDCO),
     priceMin: prices.length > 0 ? Math.min(...prices) : undefined,
     priceMax: prices.length > 0 ? Math.max(...prices) : undefined,

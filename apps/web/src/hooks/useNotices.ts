@@ -1,6 +1,6 @@
 // 공고 데이터를 실공고 프록시(VITE_NOTICES_URL)에서만 로드하는 훅.
 import { useCallback, useEffect, useState } from "react";
-import type { Notice } from "@zoopzoopcall/core";
+import { enrichNoticeWithComplexProfile, type Notice } from "@zoopzoopcall/core";
 
 export type NoticeSource = "live" | "not-connected";
 
@@ -32,7 +32,7 @@ export function useNotices() {
       if (!res.ok || !Array.isArray(data)) {
         throw new Error(Array.isArray(data) ? `HTTP ${res.status}` : data.error || `HTTP ${res.status}`);
       }
-      setNotices(data);
+      setNotices(data.map(enrichNoticeWithComplexProfile));
       setSource("live");
     } catch (err) {
       setNotices([]);

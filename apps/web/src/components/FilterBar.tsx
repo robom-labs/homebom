@@ -1,4 +1,4 @@
-// 유형·접수상태·지역 필터 바. 1줄 유형 칩 + 2줄 상태 세그먼트/지역으로 배치한다.
+// 유형·접수상태·지역 필터 바. 화면 폭에 따라 유형 버튼을 균형 있게 정렬한다.
 import type { NoticeType } from "@zoopzoopcall/core";
 
 export type TypeFilter = NoticeType | "전체";

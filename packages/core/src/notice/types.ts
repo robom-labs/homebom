@@ -36,6 +36,10 @@ export type Notice = {
   address?: string;
   /** 단지 전체 세대수. 현재 청약홈 잔여세대 API에는 없어 별도 보강 데이터가 있을 때만 채운다. */
   totalHouseholdCount?: number;
+  /** 단지 전체 세대수의 공개 확인 출처. */
+  totalHouseholdSourceUrl?: string;
+  /** 총세대수 공개자료를 마지막으로 대조한 날짜. */
+  totalHouseholdVerifiedAt?: string;
   /** 이번 공고의 모집 세대수. */
   supplyCount?: number;
   /** 공급금액 하한(만원). */

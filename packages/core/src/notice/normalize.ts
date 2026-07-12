@@ -1,5 +1,6 @@
 // 청약홈 API(15098547) 원시 응답을 Notice로 정규화하는 순수함수.
 import type { Notice, NoticeModelSummary, NoticeType } from "./types";
+import { findComplexProfile } from "./complexProfiles";
 
 /**
  * getRemndrLttotPblancDetail 응답 아이템.
@@ -126,6 +127,7 @@ export function normalizeRemndrItem(
   const manageNo = String(raw.HOUSE_MANAGE_NO ?? "");
   const pblancNo = String(raw.PBLANC_NO ?? "");
   const supply = optionalPositiveNumber(raw.TOT_SUPLY_HSHLDCO);
+  const profile = findComplexProfile(houseName, raw.HSSPLY_ADRES?.trim());
   const modelSummaries = normalizeRemndrModels(modelItems);
   const prices = modelSummaries
     .map((m) => m.priceMax)
@@ -144,6 +146,9 @@ export function normalizeRemndrItem(
     regionCode: raw.SUBSCRPT_AREA_CODE?.trim(),
     zipCode: raw.HSSPLY_ZIP?.trim(),
     address: raw.HSSPLY_ADRES?.trim(),
+    totalHouseholdCount: profile?.totalHouseholdCount,
+    totalHouseholdSourceUrl: profile?.sourceUrl,
+    totalHouseholdVerifiedAt: profile?.verifiedAt,
     supplyCount: supply,
     priceMin: prices.length > 0 ? Math.min(...prices) : undefined,
     priceMax: prices.length > 0 ? Math.max(...prices) : undefined,

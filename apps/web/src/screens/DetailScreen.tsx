@@ -75,6 +75,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
   };
 
   const housingCategory = inferHousingCategory(notice.housingCategory, notice.sourceOperation);
+  const receiptStartLabel = formatKstDateTime(notice.receiptStart);
   const rows: Array<[string, string | undefined]> = [
     ["청약 유형", notice.type],
     ["주택 형태", housingCategory],
@@ -148,6 +149,9 @@ export function DetailScreen({ notices, subscriptions }: Props) {
               <span className="switch__knob" />
             </button>
           </div>
+          <p className="alerts-card__hint">
+            접수 시작일 <strong>{receiptStartLabel}</strong> 기준으로 예약합니다.
+          </p>
           <PermissionBanner
             compact
             permission={permission}
@@ -157,7 +161,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
           {subscribed && entry && (
             <>
               <div className="alerts-card__group">
-                <h3>접수 시작</h3>
+                <h3>접수 시작 <small>{receiptStartLabel}</small></h3>
                 <div className="alerts-card__chips">
                   {DEFAULT_OPEN_OFFSETS.map((off) => (
                     <button
@@ -166,7 +170,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
                       aria-pressed={entry.open.includes(off)}
                       onClick={() => onOffset("open", off)}
                     >
-                      {off === 0 ? "정각" : `${offsetLabel(off)} 전`}
+                      {off === 0 ? "접수 시각" : `${offsetLabel(off)} 전`}
                     </button>
                   ))}
                 </div>
@@ -199,6 +203,11 @@ export function DetailScreen({ notices, subscriptions }: Props) {
         {notice.officialHomepageUrl && (
           <a className="btn btn--ghost btn--big" href={notice.officialHomepageUrl} target="_blank" rel="noreferrer">
             공식 홈페이지 보기
+          </a>
+        )}
+        {notice.totalHouseholdSourceUrl && (
+          <a className="btn btn--ghost btn--big" href={notice.totalHouseholdSourceUrl} target="_blank" rel="noreferrer">
+            단지 규모 출처 보기
           </a>
         )}
       </div>

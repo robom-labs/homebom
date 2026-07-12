@@ -24,6 +24,8 @@ function stubDom() {
   vi.stubGlobal("window", {
     setInterval: () => 0,
     clearInterval: () => {},
+    setTimeout: () => 0,
+    clearTimeout: () => {},
   });
   vi.stubGlobal("document", {
     addEventListener: () => {},

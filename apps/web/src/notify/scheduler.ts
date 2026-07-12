@@ -6,6 +6,20 @@ import { loadFired, markFired } from "../store/subscriptions";
 import { notificationSupport, showAppNotification } from "./notifications";
 
 const delivering = new Set<string>();
+/** 브라우저 setTimeout이 한 번에 안전하게 기다릴 수 있는 최대 지연값. */
+export const MAX_TIMER_DELAY = 2_147_483_647;
+const WAKE_BUFFER_MS = 250;
+
+/** 가장 가까운 알림까지의 대기 시간. 먼 알림은 상한 뒤 다시 무장한다. */
+export function nextAlertWakeDelay(alerts: NoticeAlert[], now: number): number | null {
+  const next = alerts.reduce<NoticeAlert | undefined>(
+    (soonest, alert) =>
+      alert.fireAt > now && (!soonest || alert.fireAt < soonest.fireAt) ? alert : soonest,
+    undefined,
+  );
+  if (!next) return null;
+  return Math.min(next.fireAt - now + WAKE_BUFFER_MS, MAX_TIMER_DELAY);
+}
 
 /** 아직 오지 않은(예정된) 알림 전체를 시간순으로 모은다. */
 export function collectPendingAlerts(
@@ -58,10 +72,11 @@ export async function deliverDueAlert(
   }
 }
 
-/** 15초 간격 + 화면 복귀 시점에 도래 알림을 확인해 울린다. 반환값은 정리 함수다. */
+/** 다음 알림 시각 타이머 + 15초 안전망 + 화면 복귀 시점에 도래 알림을 확인한다. */
 export function startAlertScheduler(
   getState: () => { notices: Notice[]; subs: SubMap; noticeSnapshots: NoticeSnapshotMap },
 ): () => void {
+  let wakeTimer: number | undefined;
   const check = () => {
     // ★ 권한이 아직 granted 가 아니면 아무것도 하지 않는다.
     // (showAppNotification 은 권한이 없으면 조용히 리턴하는데, 그 전에 markFired 를 부르면
@@ -73,14 +88,27 @@ export function startAlertScheduler(
       void deliverDueAlert(alert);
     }
   };
-  const interval = window.setInterval(check, 15_000);
+  const rearm = () => {
+    if (wakeTimer !== undefined) window.clearTimeout(wakeTimer);
+    wakeTimer = undefined;
+    if (notificationSupport() !== "granted") return;
+    const { notices, subs, noticeSnapshots } = getState();
+    const delay = nextAlertWakeDelay(collectPendingAlerts(notices, subs, Date.now(), noticeSnapshots), Date.now());
+    if (delay !== null) wakeTimer = window.setTimeout(run, delay);
+  };
+  const run = () => {
+    check();
+    rearm();
+  };
+  const interval = window.setInterval(run, 15_000);
   const onVisible = () => {
-    if (document.visibilityState === "visible") check();
+    if (document.visibilityState === "visible") run();
   };
   document.addEventListener("visibilitychange", onVisible);
-  check();
+  run();
   return () => {
     window.clearInterval(interval);
+    if (wakeTimer !== undefined) window.clearTimeout(wakeTimer);
     document.removeEventListener("visibilitychange", onVisible);
   };
 }

@@ -1,7 +1,7 @@
 // 알림 계산과 실제 표시 성공 여부에 따른 발송 기록을 검증한다.
 import { describe, expect, it } from "vitest";
 import type { Notice } from "@zoopzoopcall/core";
-import { collectPendingAlerts, deliverDueAlert } from "../scheduler";
+import { collectPendingAlerts, deliverDueAlert, MAX_TIMER_DELAY, nextAlertWakeDelay } from "../scheduler";
 import type { NoticeSnapshotMap, SubMap } from "../../store/subscriptions";
 
 const makeNotice = (overrides: Partial<Notice> & { id: string }): Notice => ({
@@ -98,5 +98,22 @@ describe("deliverDueAlert", () => {
 
     expect(shown).toBe(false);
     expect(recorded).toEqual([]);
+  });
+});
+
+describe("nextAlertWakeDelay", () => {
+  it("가장 가까운 미래 알림 시각에 맞춰 깨운다", () => {
+    const now = T("2026-07-01T00:00:00Z");
+    const alerts = [
+      { id: "later", fireAt: now + 20_000 },
+      { id: "next", fireAt: now + 3_000 },
+    ] as never[];
+    expect(nextAlertWakeDelay(alerts, now)).toBe(3_250);
+  });
+
+  it("24.8일보다 먼 알림은 재무장 상한을 사용하고 미래 알림이 없으면 null이다", () => {
+    const now = T("2026-07-01T00:00:00Z");
+    expect(nextAlertWakeDelay([{ fireAt: now + MAX_TIMER_DELAY + 1 } as never], now)).toBe(MAX_TIMER_DELAY);
+    expect(nextAlertWakeDelay([], now)).toBeNull();
   });
 });
