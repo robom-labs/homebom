@@ -1,10 +1,11 @@
 // 청약봄 서비스워커. 앱 셸 캐시(오프라인)와 알림 클릭 처리를 담당한다.
 // 캐시 이름을 올리면 activate 단계에서 이전 버전 캐시(zzc-v1 등)가 자동 삭제된다.
-const CACHE = "zzc-v7";
+const CACHE = "zzc-v8";
 
 // 설치 직후 오프라인에서도 아이콘·매니페스트가 보이도록 앱 셸을 미리 캐시한다.
 // 경로는 sw.js 위치 기준 상대경로만 사용해 base path(/homebom/)를 하드코딩하지 않는다.
 const APP_SHELL = [
+  "./",
   "./manifest.webmanifest",
   "./icons/icon-v2.svg",
   "./icons/apple-touch-icon-v2.png",
@@ -42,11 +43,15 @@ self.addEventListener("fetch", (event) => {
       const cache = await caches.open(CACHE);
       try {
         const res = await fetch(event.request);
-        if (res.ok) cache.put(event.request, res.clone());
+        if (res.ok) await cache.put(event.request, res.clone());
         return res;
       } catch (err) {
         const hit = await cache.match(event.request, { ignoreSearch: true });
         if (hit) return hit;
+        if (event.request.mode === "navigate") {
+          const shell = await cache.match("./");
+          if (shell) return shell;
+        }
         throw err;
       }
     })(),
@@ -55,6 +60,15 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data && event.notification.data.url;
-  event.waitUntil(self.clients.openWindow(url || self.registration.scope));
+  const target = new URL(event.notification.data?.url || self.registration.scope, self.registration.scope).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+      for (const client of clients) {
+        if (!client.url.startsWith(self.location.origin)) continue;
+        if ("navigate" in client) await client.navigate(target);
+        return client.focus();
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
 });
