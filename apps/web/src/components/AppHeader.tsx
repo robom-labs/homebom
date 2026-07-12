@@ -50,13 +50,12 @@ type Props = {
 };
 
 export function AppHeader({ title = "청약봄", source, action, compact = false }: Props) {
+  const iconUrl = `${import.meta.env.BASE_URL}icons/icon-v2.svg`;
+
   return (
     <header className={`appbar${compact ? " appbar--compact" : ""}`}>
       <div className="appbar__mark" aria-hidden="true">
-        <svg viewBox="0 0 32 32" width="32" height="32">
-          <path d="M7 27V7.5A2.5 2.5 0 0 1 9.5 5h13A2.5 2.5 0 0 1 25 7.5V27" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinejoin="round" />
-          <path d="M11 10h3m4 0h3m-10 5h3m4 0h3m-10 5h3m4 0h3M14 27v-3.5h4V27" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
-        </svg>
+        <img className="appbar__icon" src={iconUrl} alt="" />
       </div>
       <div className="appbar__copy">
         <h1 className="appbar__title">

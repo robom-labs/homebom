@@ -1,0 +1,8 @@
+<!-- 청약봄의 주택 기회와 접수 일정을 나타내는 대표 앱 아이콘. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">청약봄</title>
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="#e7f4e7" stroke="#b9ddbf" stroke-width="2"/>
+  <rect x="19" y="16" width="26" height="33" rx="3.5" fill="#fffaf3" stroke="#1d3047" stroke-width="3.5"/>
+  <path d="M25 25h4M35 25h4M25 33h4M35 33h4M29 49v-8h6v8" fill="none" stroke="#4ea565" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="50" cy="14" r="3" fill="#4ea565"/>
+</svg>

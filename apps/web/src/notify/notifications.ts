@@ -25,7 +25,7 @@ export async function showAppNotification(
   tag: string,
 ): Promise<boolean> {
   if (notificationSupport() !== "granted") return false;
-  const icon = `${import.meta.env.BASE_URL}icons/icon-192.png`;
+  const icon = `${import.meta.env.BASE_URL}icons/icon-192-v2.png`;
   const options: NotificationOptions = { body, tag, icon, data: { url } };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
