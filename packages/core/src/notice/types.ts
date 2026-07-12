@@ -34,7 +34,9 @@ export type Notice = {
   city?: string;
   zipCode?: string;
   address?: string;
-  /** 공급 세대수. */
+  /** 단지 전체 세대수. 현재 청약홈 잔여세대 API에는 없어 별도 보강 데이터가 있을 때만 채운다. */
+  totalHouseholdCount?: number;
+  /** 이번 공고의 모집 세대수. */
   supplyCount?: number;
   /** 공급금액 하한(만원). */
   priceMin?: number;

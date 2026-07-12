@@ -194,6 +194,7 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string) {
     pblancNo,
     type: resolveType(raw),
     officialTypeName: text(raw.HOUSE_SECD_NM),
+    housingCategory: "아파트",
     sourceOperation: DETAIL_OPERATION,
     houseName,
     region: text(raw.SUBSCRPT_AREA_CODE_NM) || "전국",
