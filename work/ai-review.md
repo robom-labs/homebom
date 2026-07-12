@@ -360,3 +360,51 @@
 - 360×800 첫 카드 top 669.6px → 662.6px로 7px 상향. 320px 카드 높이는 373.1px이며 320·360·720에서 가로 넘침 없음.
 - 캘린더 날짜 터치 높이 44px. 상세 표에 `주택 형태 아파트 / 단지 전체 공고문 확인 / 이번 모집 5세대`가 분리 표시됨.
 - 타입체크 PASS. 테스트 72개 PASS(core 55 + web 17, 주택·세대 문구 신규 6개 포함). 프로덕션 build와 `/homebom/` base path, 서비스워커 문법 검사 PASS.
+
+---
+
+# 라운드 4 — 필터·상태 바 모바일 최적화 (agent/filter-status-bar-optimize)
+
+## 사용자 요청
+
+- 목록 상단 필터·상태 바가 답답하고 최적화가 별로. 폰에서 한 번에 깔끔하게 다 보이게(a) 하거나 버튼식으로 펼치게(b). 간격이 너무 붙어있음. "생각해서 최적화."
+
+## 점검 기준 / 현황(실측)
+
+- 360·320px에서 타입 칩 4개(전체/무순위/잔여세대/취소후재공급) 중 뒤 2개가 가로 넘침으로 화면 밖(스크롤 어포던스 없음), 지역 select가 `max-width:36vw`로 "전체 지"/"전체 :"로 잘림, 상태 세그먼트도 넘쳐 "마감·취소" 잘림. 두 줄 간격이 좁음.
+
+## 담당자 독립 분석 및 교차검토
+
+### Planner
+- 옵션 (a) 채택, CSS 전용(FilterBar props·로직·마크업 무수정). 합격 기준 제시(320/360에서 칩4·상태3·지역 라벨 전부 잘림 없이).
+- 반박·보완: 칩 wrap 2줄로 세로 증가 → 지역 select를 독립 행으로 내려 칩이 폭을 온전히 쓰게. 상태를 primary로 위로 올리는 재배치는 마크업 변경이라 범위 밖(별도 MINOR).
+
+### Growth
+- (a) 채택. 우선순위 상태 > 유형 > 지역. 긴급성 앱은 필터 발견성이 전환의 전부 → 접기(b)는 마찰.
+- 반박·보완: 상태를 primary 세그먼트로 상단 크게 두는 편이 이상적(단 재배치는 구조 변경). "잘림=스크롤 힌트" 주장은 세로 목록에서 가로 스크롤 발견성 낮아 기각.
+
+### Architect
+- FilterBar props/tablist·tab·aria-selected/counts 바인딩/STATUS_ORDER 자동전환 불변. 회귀점: `.filters` 음수 margin bleed, segmented grid 전환 시 `overflow-x`/`flex:none` 반드시 제거(안 하면 재넘침), 마감·취소 nowrap.
+- 반박·보완: **상태를 top primary로 올리지 말 것**(statusView가 목록 heading·자동전환 주축이라 유형→상태 위계 유지가 정보구조상 맞음). region 칩화 제외(지역 수 가변). sticky 보류.
+
+### Inspector
+- 기준선 typecheck/test72/build PASS, base path·secret·DB·lockfile 무관.
+- 조건: 320px 칩-select 겹침, 세그먼트 grid 전환 시 aria 보존, 다크모드·저높이(320×568) 캘린더 밀림 수동 검증. 시각 회귀 테스트 부재.
+
+## 최종 리드 판단
+
+### 채택 (CSS 전용, 순서 유지 = type → region → status)
+1. 타입 칩: `.filters__chips` `flex-wrap:wrap` + `flex:1 1 100%`, `overflow-x` 제거 → 4칩 전부 표시(좁으면 2줄).
+2. 지역 select: 칩이 전폭을 쓰면서 select가 자연히 아래 독립 행으로, `max-width:36vw` → `none`으로 "전체 지역" 전체 라벨 표시.
+3. 상태 세그먼트: `.segmented` `display:grid; grid-template-columns:repeat(3,1fr)`, `overflow-x`·`flex:none` 제거, 내부 `justify-content:center`·`white-space:nowrap` → 3개 한 줄에 잘림 없이.
+4. `.filters`를 세로 flex + `gap:13px`, top-row `row-gap:10px`로 간격 확대(답답함 해소). 터치 48px 유지, aria/마크업 불변.
+
+### 보류/제외 (팀 합의)
+- 옵션 (b) 접기 버튼식: 고빈도 필터에 탭 마찰 → 제외.
+- 상태 세그먼트를 최상단 primary로 재배치(growth 제안): 마크업/정보구조 변경 → 별도 MINOR로 분리(architect·planner 반대).
+- region 칩화, sticky 필터: 제외/보류.
+
+### 합격 기준 및 실측 결과
+- 320·360px: 타입 칩 4개 전부 노출, 지역 "전체 지역" 전체 표시, 상태 "접수 중 1 / 접수 예정 2 / 마감·취소 0" 한 줄 잘림 없음, 가로 스크롤/넘침 없음(overflowX=false), 그룹 간 간격 확대.
+- 다크모드 정상, 터치 48px 유지, aria(tablist/tab/aria-selected) 마크업 불변.
+- typecheck PASS, test 72 PASS(core 55 + web 17), build PASS, dist `/homebom/` base 유지. diff는 styles.css 1파일(CSS 전용).

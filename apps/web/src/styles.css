@@ -89,17 +89,18 @@ a { color: inherit; }
 .notice-bar { margin: 0 0 14px; padding: 13px 15px; border-radius: 15px; background: var(--danger-soft); color: var(--danger); font-size: 14px; font-weight: 700; }
 .notice-bar--muted { margin-top: 18px; color: var(--muted); background: var(--surface-muted); font-weight: 500; }
 
-.filters { margin: 0 -20px 16px; padding: 0 20px 10px; }
+/* 필터 바: 폰에서 유형칩·지역·상태가 잘림/가로스크롤 없이 한 번에 보이도록 세로로 쌓는다. */
+.filters { display: flex; flex-direction: column; gap: 13px; margin: 2px -20px 18px; padding: 0 20px; }
 .filters__row { display: flex; align-items: center; gap: 8px; }
-.filters__chips { display: flex; flex: 1; gap: 8px; min-width: 0; overflow-x: auto; padding: 2px 0; scrollbar-width: none; }
-.filters__chips::-webkit-scrollbar { display: none; }
+.filters__row--top { flex-wrap: wrap; row-gap: 10px; }
+.filters__chips { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .filters__select { flex: none; }
-.filters__select select { min-height: 48px; max-width: 36vw; padding: 0 38px 0 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface); font-weight: 700; }
+.filters__select select { min-height: 48px; max-width: none; padding: 0 40px 0 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface); font-weight: 700; }
 .chip { flex: none; min-height: 48px; padding: 0 18px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface); font-weight: 750; }
 .chip--active { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent-deep); background: var(--hero-strong); }
-.segmented { display: flex; gap: 8px; margin-bottom: 10px; overflow-x: auto; scrollbar-width: none; }
-.segmented::-webkit-scrollbar { display: none; }
-.segmented__item { flex: none; min-height: 48px; display: inline-flex; align-items: center; gap: 7px; padding: 0 18px; border-radius: 999px; color: var(--muted); background: var(--surface-muted); font-weight: 750; }
+.segmented { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.segmented__item { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 8px; border-radius: 999px; color: var(--muted); background: var(--surface-muted); font-weight: 750; white-space: nowrap; }
+.segmented__label { overflow: hidden; text-overflow: ellipsis; }
 .segmented__item--active { color: var(--accent-deep); background: var(--hero-strong); }
 .segmented__count { font-variant-numeric: tabular-nums; }
 
