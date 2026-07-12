@@ -21,7 +21,7 @@ type Props = {
 
 const STATUS_ORDER: StatusView[] = ["접수중", "접수예정", "마감·취소"];
 const HEADING: Record<StatusView, string> = {
-  접수중: "지금 접수중",
+  접수중: "지금 접수 중",
   접수예정: "접수 예정",
   "마감·취소": "마감·취소",
 };

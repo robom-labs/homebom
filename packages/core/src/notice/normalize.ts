@@ -137,6 +137,7 @@ export function normalizeRemndrItem(
     pblancNo,
     type: resolveNoticeType(raw),
     officialTypeName: raw.HOUSE_SECD_NM?.trim(),
+    housingCategory: "아파트",
     sourceOperation: "getRemndrLttotPblancDetail",
     houseName,
     region: raw.SUBSCRPT_AREA_CODE_NM?.trim() || "전국",

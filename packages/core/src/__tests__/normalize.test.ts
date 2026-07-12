@@ -68,6 +68,7 @@ describe("normalizeRemndrItem", () => {
     expect(n).not.toBeNull();
     expect(n!.id).toBe("2026000001-1");
     expect(n!.type).toBe("무순위");
+    expect(n!.housingCategory).toBe("아파트");
     expect(n!.houseName).toBe("행복마을 어울림");
     expect(n!.region).toBe("경기");
     expect(n!.supplyCount).toBe(12);

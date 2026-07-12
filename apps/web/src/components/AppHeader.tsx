@@ -23,14 +23,14 @@ export function AppHeader({ title = "청약봄", source, action, compact = false
           {title}
           {title === "청약봄" && <span className="appbar__dot" aria-hidden="true" />}
         </h1>
-        {!compact && <p className="appbar__tagline">robom · 다시 없을 기회의 날</p>}
+        {!compact && <p className="appbar__tagline">청약 일정, 한눈에</p>}
       </div>
       {(action || source) && (
         <div className="appbar__action">
           {action ??
             (source && (
             <span className={`source source--${source}`}>
-              {source === "live" ? "실공고" : "연결 필요"}
+              {source === "live" ? "공식" : "연결 필요"}
             </span>
             ))}
         </div>

@@ -6,10 +6,12 @@ import {
   DEFAULT_CLOSE_OFFSETS,
   DEFAULT_OPEN_OFFSETS,
   formatArea,
+  formatHouseTypeLabel,
   formatKstDateTime,
   formatManwon,
   formatPriceRange,
   getNoticeStatus,
+  inferHousingCategory,
   isClosingSoon,
   offsetLabel,
   type AlertKind,
@@ -72,15 +74,16 @@ export function DetailScreen({ notices, subscriptions }: Props) {
     toggleOffset(notice.id, kind, off);
   };
 
+  const housingCategory = inferHousingCategory(notice.housingCategory, notice.sourceOperation);
   const rows: Array<[string, string | undefined]> = [
-    ["유형", notice.type],
-    ["공식 구분", notice.officialTypeName],
-    ["주택 분류", notice.housingCategory],
+    ["청약 유형", notice.type],
+    ["주택 형태", housingCategory],
     ["지역", notice.region],
     ["위치", notice.address],
     ["우편번호", notice.zipCode],
-    ["공급", notice.supplyCount ? `${notice.supplyCount}세대` : undefined],
-    ["공급금액", formatPriceRange(notice) ?? "모집공고 원문 확인 필요"],
+    ["단지 전체", notice.totalHouseholdCount ? `${notice.totalHouseholdCount.toLocaleString("ko-KR")}세대` : "공고문 확인"],
+    ["이번 모집", notice.supplyCount ? `${notice.supplyCount.toLocaleString("ko-KR")}세대` : "공고문 확인"],
+    ["분양가", formatPriceRange(notice) ?? "공고문 확인"],
     ["모집공고일", notice.announceDate],
     ["접수 시작", formatKstDateTime(notice.receiptStart)],
     ["접수 마감", formatKstDateTime(notice.receiptEnd)],
@@ -217,12 +220,12 @@ export function DetailScreen({ notices, subscriptions }: Props) {
 
       {notice.modelSummaries && notice.modelSummaries.length > 0 && (
         <section className="detail__models">
-          <h2>주택형·금액</h2>
+          <h2>주택형·분양가</h2>
           {notice.modelSummaries.map((model) => (
             <div className="model-row" key={`${model.modelNo ?? ""}-${model.houseType ?? ""}`}>
               <div>
-                <strong>{model.houseType ?? "주택형 확인 필요"}</strong>
-                <span>{formatArea(model.supplyArea) ?? "면적 확인 필요"}</span>
+                <strong>{formatHouseTypeLabel(model.houseType) ?? "주택형 확인"}</strong>
+                <span>{formatArea(model.supplyArea) ?? "면적 공고문 확인"}</span>
               </div>
               <div>
                 <span>

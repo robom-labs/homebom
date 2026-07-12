@@ -4,10 +4,14 @@ import type { Notice } from "@zoopzoopcall/core";
 import {
   ddayKst,
   formatArea,
+  formatHouseholdSummary,
+  formatHouseTypeLabel,
+  formatKstDate,
   formatKstDateTime,
   formatPriceRange,
   formatRemaining,
   getNoticeStatus,
+  inferHousingCategory,
   isClosingSoon,
   kstDateKey,
 } from "@zoopzoopcall/core";
@@ -54,13 +58,13 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
     (best, m) => ((m.supplyCount ?? 0) > (best?.supplyCount ?? 0) ? m : best),
     models[0],
   );
-  const homeType = model?.houseType ?? notice.housingCategory ?? notice.officialTypeName ?? notice.type;
+  const housingCategory = inferHousingCategory(notice.housingCategory, notice.sourceOperation);
+  const houseType = formatHouseTypeLabel(model?.houseType);
   const areaText = formatArea(model?.supplyArea);
   const distinctAreas = new Set(models.map((m) => m.supplyArea).filter(Boolean));
   const area = areaText ? (distinctAreas.size > 1 ? `${areaText} 외` : areaText) : "면적 확인";
-  const eyebrow = [notice.region, notice.supplyCount ? `${notice.supplyCount}세대` : null]
-    .filter(Boolean)
-    .join(" · ");
+  const houseSpec = [houseType, areaText ? area : null].filter(Boolean).join(" · ") || "공고문 확인";
+  const households = formatHouseholdSummary(notice.totalHouseholdCount, notice.supplyCount);
 
   return (
     <Link
@@ -76,14 +80,13 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
         {stamp && <DdayStamp label={stamp.label} tone={stamp.tone} />}
       </div>
       <h3 className="card__title">{notice.houseName}</h3>
-      <p className="card__eyebrow">{eyebrow}</p>
+      <p className="card__meta">{notice.region} · {housingCategory}</p>
       <dl className="card__info">
-        <div className="card__info-row"><dt className="card__label">모집</dt><dd className="card__value">{notice.supplyCount ? `${notice.supplyCount}세대` : "공고문 확인"}</dd></div>
-        <div className="card__info-row"><dt className="card__label">분양가</dt><dd className={`card__value${price ? " card__value--price" : " card__value--muted"}`}>{price ?? "공고문 확인"}</dd></div>
-        <div className="card__info-row"><dt className="card__label">주택</dt><dd className="card__value">{homeType}</dd></div>
-        <div className="card__info-row"><dt className="card__label">면적</dt><dd className="card__value">{area}</dd></div>
-        <div className="card__info-row"><dt className="card__label">당첨 발표</dt><dd className="card__value">{notice.winnerDate ?? "공고문 확인"}</dd></div>
-        <div className="card__info-row card__info-row--wide"><dt className="card__label">접수</dt><dd className="card__value">{receiptText(notice)}</dd></div>
+        <div className="card__info-row card__info-row--wide card__info-row--households"><dt className="card__label">세대</dt><dd className="card__value">{households}</dd></div>
+        <div className="card__info-row card__info-row--wide"><dt className="card__label">분양가</dt><dd className={`card__value${price ? " card__value--price" : " card__value--muted"}`}>{price ?? "공고문 확인"}</dd></div>
+        <div className="card__info-row"><dt className="card__label">대표형·면적</dt><dd className="card__value">{houseSpec}</dd></div>
+        <div className="card__info-row"><dt className="card__label">당첨 발표</dt><dd className="card__value">{notice.winnerDate ? formatKstDate(notice.winnerDate) : "공고문 확인"}</dd></div>
+        <div className="card__info-row card__info-row--wide"><dt className="card__label">접수 기간</dt><dd className="card__value">{receiptText(notice)}</dd></div>
       </dl>
       <div className="card__foot">
         {status === "접수중" && (
