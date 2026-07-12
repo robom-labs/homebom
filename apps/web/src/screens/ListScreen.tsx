@@ -1,11 +1,11 @@
 // 공고 목록 화면. 유형·지역 필터 + 접수중/예정/마감·취소 상태를 골라 본다.
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import type { Notice } from "@zoopzoopcall/core";
-import { ddayKst, formatKstDateTime, formatRemaining, getNoticeStatus } from "@zoopzoopcall/core";
+import { getNoticeStatus } from "@zoopzoopcall/core";
 import { AppHeader } from "../components/AppHeader";
 import { FilterBar, type StatusView, type TypeFilter } from "../components/FilterBar";
 import { NoticeCard } from "../components/NoticeCard";
+import { NoticeCalendar } from "../components/NoticeCalendar";
 import { PermissionBanner } from "../components/PermissionBanner";
 import { useNow } from "../hooks/useNow";
 import type { NoticeSource } from "../hooks/useNotices";
@@ -25,19 +25,6 @@ const HEADING: Record<StatusView, string> = {
   접수예정: "접수 예정",
   "마감·취소": "마감·취소",
 };
-
-function shortDateTime(iso: string): string {
-  return formatKstDateTime(iso).replace(/^\d{4}-/, "");
-}
-
-function urgencyLabel(notice: Notice, now: number): string {
-  const status = getNoticeStatus(notice, now);
-  if (status === "마감" || status === "취소") return status;
-  const target = status === "접수중" ? notice.receiptEnd : notice.receiptStart;
-  const dday = ddayKst(target, now);
-  const prefix = status === "접수중" ? "마감" : "접수";
-  return dday === 0 ? `${prefix} 오늘` : `${prefix} D-${dday}`;
-}
 
 export function ListScreen({ notices, source, error, loading, subs }: Props) {
   const now = useNow(15_000);
@@ -96,11 +83,6 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
   };
 
   const active = groups[statusView];
-  const hero = active[0];
-  const opportunities = active.slice(1);
-  const heroStatus = hero ? getNoticeStatus(hero, now) : null;
-  const heroClosed = heroStatus === "마감" || heroStatus === "취소";
-  const heroTarget = heroStatus === "접수중" ? hero?.receiptEnd : hero?.receiptStart;
 
   return (
     <div className="screen">
@@ -122,6 +104,8 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
           counts={counts}
         />
       )}
+
+      {!loading && <NoticeCalendar notices={filtered} now={now} />}
 
       {loading && <p className="empty">공고를 불러오는 중입니다…</p>}
 
@@ -146,59 +130,10 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
 
       {!loading && filtered.length > 0 && (
         <>
-          {hero ? (
-            <section className="hero-card" aria-labelledby="hero-title">
-              <div className="hero-card__rule" aria-hidden="true" />
-              <div className="hero-card__top">
-                <span className="hero-card__status">{urgencyLabel(hero, now)}</span>
-                <span className="hero-card__symbol" aria-hidden="true">⌂</span>
-              </div>
-              <h2 id="hero-title" className="hero-card__title">{hero.houseName}</h2>
-              <p className="hero-card__meta">
-                {[hero.region, hero.type, hero.supplyCount ? `${hero.supplyCount}세대` : null]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-              <dl className="hero-card__metrics">
-                <div>
-                  <dt>{heroClosed ? "접수 시작" : heroStatus === "접수중" ? "접수 시작" : "시작 예정"}</dt>
-                  <dd>{shortDateTime(hero.receiptStart)}</dd>
-                </div>
-                <div>
-                  <dt>{heroClosed ? "접수 마감" : heroStatus === "접수중" ? "마감까지" : "시작까지"}</dt>
-                  <dd>{heroClosed ? shortDateTime(hero.receiptEnd) : heroTarget ? formatRemaining(Date.parse(heroTarget) - now) : "일정 확인"}</dd>
-                </div>
-                <div>
-                  <dt>공급 규모</dt>
-                  <dd>{hero.supplyCount ? `${hero.supplyCount}세대` : "공고 확인"}</dd>
-                </div>
-              </dl>
-              <div className="hero-card__foot">
-                <p>{heroClosed ? "종료된 일정과 공고 원문을 확인할 수 있어요." : hero.id in subs ? "이 공고의 알림이 켜져 있어요." : "놓치기 전에 알림 시간을 골라보세요."}</p>
-                <Link className="btn btn--primary hero-card__cta" to={`/notice/${hero.id}`}>
-                  {heroClosed ? "공고 확인" : hero.id in subs ? "알림 확인" : "알림 켜기"}
-                </Link>
-              </div>
-            </section>
-          ) : (
-            <p className="empty empty__body">이 상태의 공고가 지금은 없어요.</p>
-          )}
-
-          {hero && (
-            <section className="opportunities">
-              <div className="section-heading">
-                <h2>{statusView === "접수예정" ? "곧 열리는 기회" : HEADING[statusView]}</h2>
-                <span>{active.length}</span>
-              </div>
-              {opportunities.length > 0 ? (
-                opportunities.map((n) => (
-                  <NoticeCard key={n.id} notice={n} now={now} subscribed={n.id in subs} />
-                ))
-              ) : (
-                <p className="section-empty">이어서 보여드릴 공고는 아직 없어요.</p>
-              )}
-            </section>
-          )}
+          <section className="opportunities" aria-labelledby="notice-list-title">
+            <div className="section-heading"><h2 id="notice-list-title">{statusView === "접수예정" ? "곧 열리는 기회" : HEADING[statusView]}</h2><span>{active.length}</span></div>
+            {active.length > 0 ? active.map((n) => <NoticeCard key={n.id} notice={n} now={now} subscribed={n.id in subs} />) : <p className="section-empty">이 상태의 공고가 지금은 없어요.</p>}
+          </section>
 
           <aside className="ad-slot" aria-label="비활성 광고 영역">
             <span>광고</span>

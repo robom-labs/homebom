@@ -250,3 +250,30 @@ a { color: inherit; }
 }
 
 @keyframes screen-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* 밝고 따뜻한 청약봄 화면을 우선하는 공통 봄 테마다. */
+:root {
+  color-scheme: light;
+  --page: #fffaf3;
+  --surface: #ffffff;
+  --surface-muted: #fff4e7;
+  --hero: #eef8ed;
+  --hero-strong: #e0f2e2;
+  --ink: #27342b;
+  --muted: #68756d;
+  --line: #e7dfd4;
+  --accent: #4ea565;
+  --accent-deep: #287141;
+  --primary: var(--accent);
+  --primary-soft: var(--hero-strong);
+  --danger: #d86b5a;
+  --shadow: 0 14px 34px rgba(92, 67, 44, .08);
+}
+
+.notice-calendar { margin: 22px 0 18px; border: 1px solid #efe2d4; border-radius: 24px; background: linear-gradient(135deg, #fff8ed, #fffdf9); padding: 18px; box-shadow: var(--shadow); }
+.notice-calendar__head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.notice-calendar__head p { margin: 0 0 4px; color: var(--primary); font-size: 12px; font-weight: 900; }.notice-calendar__head h2 { margin: 0; font-size: 20px; letter-spacing: -.04em; }.notice-calendar__head > span { border-radius: 999px; background: var(--primary-soft); padding: 7px 10px; color: var(--primary); font-size: 11px; font-weight: 900; }
+.notice-calendar__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; }.notice-calendar__day { display: grid; min-height: 78px; place-items: center; align-content: center; gap: 3px; border-radius: 15px; background: #fff; color: var(--muted); }.notice-calendar__day small { font-size: 10px; font-weight: 800; }.notice-calendar__day strong { color: var(--ink); font-size: 17px; }.notice-calendar__day span { color: var(--primary); font-size: 10px; font-weight: 900; }.notice-calendar__day.is-today { background: var(--primary); color: #fff; box-shadow: 0 7px 16px rgba(78, 165, 101, .22); }.notice-calendar__day.is-today strong, .notice-calendar__day.is-today span { color: #fff; }
+.card__info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; }.card__info-row { display: grid; gap: 4px; min-width: 0; padding: 10px 0; border-top: 1px solid var(--line); }.card__info-row:nth-child(odd) { padding-right: 10px; }.card__info-row:nth-child(even) { padding-left: 10px; }.card__info-row--wide { grid-column: 1 / -1; }.card__label { font-size: 11px; }.card__value { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: light; --page: #fffaf3; --surface: #ffffff; --surface-muted: #fff4e7; --hero: #eef8ed; --hero-strong: #e0f2e2; --ink: #27342b; --muted: #68756d; --line: #e7dfd4; --accent: #4ea565; --accent-deep: #287141; --primary: var(--accent); --primary-soft: var(--hero-strong); --danger: #d86b5a; --shadow: 0 14px 34px rgba(92, 67, 44, .08); } }
+@media (max-width: 420px) { .notice-calendar { margin-inline: -2px; padding: 14px 10px; }.notice-calendar__days { gap: 4px; }.notice-calendar__day { min-height: 68px; border-radius: 12px; }.notice-calendar__day strong { font-size: 15px; }.notice-calendar__day span { font-size: 9px; } }
