@@ -70,11 +70,11 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
       <h3 className="card__title">{notice.houseName}</h3>
       <p className="card__eyebrow">{eyebrow}</p>
       <dl className="card__info">
-        <div className="card__info-row"><dt className="card__label">모집</dt><dd className="card__value">{notice.supplyCount ? `${notice.supplyCount}세대` : "공고 확인"}</dd></div>
+        <div className="card__info-row"><dt className="card__label">모집</dt><dd className="card__value">{notice.supplyCount ? `${notice.supplyCount}세대` : "공고문 확인"}</dd></div>
         <div className="card__info-row"><dt className="card__label">분양가</dt><dd className={`card__value${price ? " card__value--price" : " card__value--muted"}`}>{price ?? "공고문 확인"}</dd></div>
         <div className="card__info-row"><dt className="card__label">주택</dt><dd className="card__value">{homeType}</dd></div>
         <div className="card__info-row"><dt className="card__label">면적</dt><dd className="card__value">{area}</dd></div>
-        <div className="card__info-row"><dt className="card__label">당첨 발표</dt><dd className="card__value">{notice.winnerDate ?? "공고 확인"}</dd></div>
+        <div className="card__info-row"><dt className="card__label">당첨 발표</dt><dd className="card__value">{notice.winnerDate ?? "공고문 확인"}</dd></div>
         <div className="card__info-row card__info-row--wide"><dt className="card__label">접수</dt><dd className="card__value">{receiptText(notice)}</dd></div>
       </dl>
       <div className="card__foot">
