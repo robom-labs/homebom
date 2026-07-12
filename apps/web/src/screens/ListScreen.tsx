@@ -16,6 +16,7 @@ type Props = {
   source: NoticeSource;
   error: string | null;
   loading: boolean;
+  verifiedAt: string | null;
   subs: SubMap;
 };
 
@@ -26,7 +27,7 @@ const HEADING: Record<StatusView, string> = {
   "마감·취소": "마감·취소",
 };
 
-export function ListScreen({ notices, source, error, loading, subs }: Props) {
+export function ListScreen({ notices, source, error, loading, verifiedAt, subs }: Props) {
   const now = useNow(15_000);
   const [type, setType] = useState<TypeFilter>("전체");
   const [region, setRegion] = useState("전체");
@@ -111,6 +112,13 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
       <AppHeader source={source} />
 
       {error && <div className="notice-bar">{error}</div>}
+      {source === "stale" && (
+        <div className="notice-bar notice-bar--stale" role="status">
+          공식 공고 연결이 잠시 지연돼 마지막 확인본을 보여드려요.
+          {verifiedAt ? ` 마지막 확인 ${new Date(verifiedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}.` : ""}
+          {" "}신청 전 청약홈 원문을 다시 확인해 주세요.
+        </div>
+      )}
 
       <PermissionBanner compact hidePrompt />
 
@@ -148,7 +156,7 @@ export function ListScreen({ notices, source, error, loading, subs }: Props) {
         </div>
       )}
 
-      {!loading && filtered.length === 0 && source === "live" && (
+      {!loading && filtered.length === 0 && (source === "live" || source === "stale") && (
         <div className="empty">
           <p className="empty__title">조건에 맞는 공고가 없어요</p>
           <p className="empty__body">

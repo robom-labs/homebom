@@ -3,15 +3,34 @@
 export const KST_TZ = "Asia/Seoul";
 
 const DAY_MS = 86_400_000;
+const DATE_KEY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: KST_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const DATE_TIME_DATE_FORMATTER = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: KST_TZ,
+  month: "long",
+  day: "numeric",
+  weekday: "short",
+});
+const DATE_TIME_CLOCK_FORMATTER = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: KST_TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+const DATE_FORMATTER = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: KST_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
 /** UTC 시각(ms)을 KST 달력 날짜 문자열(YYYY-MM-DD)로 변환한다. */
 export function kstDateKey(ms: number): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: KST_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(ms));
+  return DATE_KEY_FORMATTER.format(new Date(ms));
 }
 
 /** KST 달력 기준 D-day. 오늘이면 0, 내일이면 1, 지났으면 음수. */
@@ -25,30 +44,14 @@ export function ddayKst(targetIso: string, now: number): number {
 /** "7월 10일 (금) 09:00" 형태의 KST 표기. */
 export function formatKstDateTime(iso: string): string {
   const d = new Date(iso);
-  const date = new Intl.DateTimeFormat("ko-KR", {
-    timeZone: KST_TZ,
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  }).format(d);
-  const time = new Intl.DateTimeFormat("ko-KR", {
-    timeZone: KST_TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(d);
+  const date = DATE_TIME_DATE_FORMATTER.format(d);
+  const time = DATE_TIME_CLOCK_FORMATTER.format(d);
   return `${date} ${time}`;
 }
 
 /** "2026.07.10" 형태의 KST 날짜 표기. */
 export function formatKstDate(iso: string): string {
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: KST_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  })
-    .format(new Date(iso))
+  return DATE_FORMATTER.format(new Date(iso))
     .replace(/\s/g, "")
     .replace(/\.$/, "");
 }

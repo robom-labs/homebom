@@ -72,7 +72,7 @@ export function AppHeader({ title = "청약봄", source, action, compact = false
           {action ??
             (source && (
             <span className={`source source--${source}`}>
-              {source === "live" ? "공식" : "연결 필요"}
+              {source === "live" ? "공식" : source === "stale" ? "확인 지연" : "연결 필요"}
             </span>
             ))}
         </div>

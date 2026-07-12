@@ -2,7 +2,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { enrichNoticeWithComplexProfile, type Notice } from "@zoopzoopcall/core";
 
-export type NoticeSource = "live" | "not-connected";
+export type NoticeSource = "live" | "stale" | "not-connected";
+
+export function noticeResponseMeta(headers: Headers): {
+  source: Exclude<NoticeSource, "not-connected">;
+  verifiedAt: string | null;
+} {
+  return {
+    source: headers.get("x-data-stale") === "1" ? "stale" : "live",
+    verifiedAt: headers.get("x-verified-at"),
+  };
+}
 
 /** 요청이 이 시간 안에 응답하지 않으면 중단하고 에러 상태로 전환한다(무한 로딩 방지). */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -12,6 +22,7 @@ export function useNotices() {
   const [source, setSource] = useState<NoticeSource>("not-connected");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [verifiedAt, setVerifiedAt] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,8 +43,10 @@ export function useNotices() {
       if (!res.ok || !Array.isArray(data)) {
         throw new Error(Array.isArray(data) ? `HTTP ${res.status}` : data.error || `HTTP ${res.status}`);
       }
+      const meta = noticeResponseMeta(res.headers);
       setNotices(data.map(enrichNoticeWithComplexProfile));
-      setSource("live");
+      setSource(meta.source);
+      setVerifiedAt(meta.verifiedAt);
     } catch (err) {
       setNotices([]);
       setSource("not-connected");
@@ -55,5 +68,5 @@ export function useNotices() {
     void load();
   }, [load]);
 
-  return { notices, source, error, loading, reload: load };
+  return { notices, source, error, loading, verifiedAt, reload: load };
 }

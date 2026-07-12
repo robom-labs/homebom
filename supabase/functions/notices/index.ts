@@ -36,7 +36,7 @@ const COMPLEX_PROFILES = [
 
 // 최근 성공 응답. TTL 안에서는 그대로 서빙하고(기존 캐시 동작),
 // TTL이 지나도 지우지 않고 남겨서 업스트림 장애 시 stale-if-error 폴백으로 쓴다.
-let cache: { at: number; body: string } | null = null;
+let cache: { at: number; body: string; verifiedAt: string } | null = null;
 
 // IP별 요청 카운터(인스턴스 로컬, best-effort — 위 RATE_LIMIT_MAX 주석 참고).
 const rateBuckets = new Map<string, { windowStart: number; count: number }>();
@@ -47,6 +47,7 @@ function headers(status = 200, extra: Record<string, string> = {}): ResponseInit
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
+      "access-control-expose-headers": "x-data-stale, x-verified-at",
       ...extra,
     },
   };
@@ -290,7 +291,7 @@ Deno.serve(async (req) => {
   }
 
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
-    return new Response(cache.body, headers());
+    return new Response(cache.body, headers(200, { "x-verified-at": cache.verifiedAt }));
   }
 
   const serviceKey = serviceKeyParam();
@@ -316,13 +317,16 @@ Deno.serve(async (req) => {
       .sort((a, b) => Date.parse(a.receiptStart) - Date.parse(b.receiptStart));
 
     const body = JSON.stringify(notices);
-    cache = { at: Date.now(), body };
-    return new Response(body, headers());
+    cache = { at: Date.now(), body, verifiedAt };
+    return new Response(body, headers(200, { "x-verified-at": verifiedAt }));
   } catch (err) {
     // stale-if-error: 업스트림 장애 시, TTL이 지난 마지막 성공 응답이 남아 있으면
     // 502 대신 그 복사본을 X-Data-Stale: 1 마커와 함께 서빙한다(응답 형태 동일).
     if (cache) {
-      return new Response(cache.body, headers(200, { "x-data-stale": "1" }));
+      return new Response(
+        cache.body,
+        headers(200, { "x-data-stale": "1", "x-verified-at": cache.verifiedAt }),
+      );
     }
     const message = err instanceof Error ? err.message : "청약홈 공고를 불러오지 못했습니다.";
     return new Response(JSON.stringify({ error: message }), headers(502));

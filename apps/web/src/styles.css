@@ -85,10 +85,12 @@ a { color: inherit; }
 .appbar__action { justify-self: end; }
 .source { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; border-radius: 999px; white-space: nowrap; font-weight: 800; }
 .source--live { color: var(--accent-deep); background: var(--hero-strong); }
+.source--stale { color: #805600; background: #fff1c7; }
 .source--not-connected { color: var(--danger); background: var(--danger-soft); }
 
 .notice-bar { margin: 0 0 14px; padding: 13px 15px; border-radius: 15px; background: var(--danger-soft); color: var(--danger); font-size: 14px; font-weight: 700; }
 .notice-bar--muted { margin-top: 18px; color: var(--muted); background: var(--surface-muted); font-weight: 500; }
+.notice-bar--stale { color: #6f4b00; background: #fff5d8; }
 
 /* 필터 바: 좁은 화면은 유형 2열, 넓은 화면은 유형 4열과 지역 선택을 한 줄에 정렬한다. */
 .filters { display: flex; flex-direction: column; gap: 13px; margin: 2px -20px 18px; padding: 0 20px; }
