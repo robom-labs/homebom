@@ -5,6 +5,7 @@ import type { Notice } from "@zoopzoopcall/core";
 import {
   DEFAULT_CLOSE_OFFSETS,
   DEFAULT_OPEN_OFFSETS,
+  formatArea,
   formatKstDateTime,
   formatManwon,
   formatPriceRange,
@@ -221,7 +222,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
             <div className="model-row" key={`${model.modelNo ?? ""}-${model.houseType ?? ""}`}>
               <div>
                 <strong>{model.houseType ?? "주택형 확인 필요"}</strong>
-                <span>{model.supplyArea ? `${model.supplyArea}㎡` : "면적 확인 필요"}</span>
+                <span>{formatArea(model.supplyArea) ?? "면적 확인 필요"}</span>
               </div>
               <div>
                 <span>

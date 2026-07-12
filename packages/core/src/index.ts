@@ -15,6 +15,7 @@ export {
 } from "./notice/normalize";
 export type { RawRemndrItem, RawRemndrModelItem } from "./notice/normalize";
 export { formatPriceRange } from "./notice/price";
+export { formatArea, pyeongFromSqm, SQM_PER_PYEONG } from "./notice/area";
 export {
   KST_TZ,
   kstDateKey,

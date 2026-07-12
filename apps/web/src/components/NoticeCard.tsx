@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { Notice } from "@zoopzoopcall/core";
 import {
   ddayKst,
+  formatArea,
   formatKstDateTime,
   formatPriceRange,
   formatRemaining,
@@ -47,9 +48,16 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
   }
 
   const price = formatPriceRange(notice);
-  const model = notice.modelSummaries?.[0];
+  const models = notice.modelSummaries ?? [];
+  // 대표 평형은 일반공급 세대수가 가장 많은 주택형(없으면 첫 번째)으로 고른다.
+  const model = models.reduce<typeof models[number] | undefined>(
+    (best, m) => ((m.supplyCount ?? 0) > (best?.supplyCount ?? 0) ? m : best),
+    models[0],
+  );
   const homeType = model?.houseType ?? notice.housingCategory ?? notice.officialTypeName ?? notice.type;
-  const area = model?.supplyArea ?? "면적 확인";
+  const areaText = formatArea(model?.supplyArea);
+  const distinctAreas = new Set(models.map((m) => m.supplyArea).filter(Boolean));
+  const area = areaText ? (distinctAreas.size > 1 ? `${areaText} 외` : areaText) : "면적 확인";
   const eyebrow = [notice.region, notice.supplyCount ? `${notice.supplyCount}세대` : null]
     .filter(Boolean)
     .join(" · ");
