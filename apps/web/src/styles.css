@@ -18,7 +18,7 @@
   --warning-soft: #fff3d5;
   --focus: #1769d2;
   --shadow: 0 14px 30px rgba(37, 83, 56, 0.08);
-  --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+  --font: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -75,12 +75,12 @@ a { color: inherit; }
 .appbar--compact .appbar__mark { width: 56px; height: 56px; border-radius: 19px; }
 .appbar__icon { display: block; width: 100%; height: 100%; }
 .appbar__copy { min-width: 0; }
-.appbar__title { font-size: clamp(27px, 8vw, 36px); line-height: 1.1; letter-spacing: -.04em; }
+.appbar__title { font-size: clamp(28px, 4vw, 30px); line-height: 1.1; letter-spacing: -.04em; }
 .appbar--compact .appbar__title { font-size: 28px; }
 .appbar__dot { display: inline-block; width: 11px; height: 11px; margin-left: 8px; border-radius: 50%; background: var(--accent); vertical-align: .18em; }
-.appbar__wordmark { display: inline-flex; align-items: center; gap: 3px; height: 38px; max-width: 100%; }
-.appbar__prefix { flex: none; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; font-size: .86em; font-weight: 720; line-height: 1; letter-spacing: -.055em; transform: translateY(-1px); }
-.appbar__bom { display: block; width: auto; height: 34px; flex: none; }
+.appbar__wordmark { display: inline-block; max-width: 100%; font-family: var(--font); font-weight: 900; line-height: 1; letter-spacing: -.04em; white-space: nowrap; }
+.appbar__prefix { font: inherit; letter-spacing: inherit; }
+.appbar__bom { display: inline-block; width: auto; height: 1.18em; vertical-align: -.2em; }
 .appbar__tagline { margin-top: 8px; color: var(--muted); font-size: 15px; }
 .appbar__action { justify-self: end; }
 .source { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 18px; border-radius: 999px; white-space: nowrap; font-weight: 800; }
@@ -308,7 +308,7 @@ a { color: inherit; }
   .screen { padding-top: max(14px, env(safe-area-inset-top)); }
   .appbar { grid-template-columns: 54px minmax(0, 1fr) auto; gap: 10px; padding-bottom: 10px; }
   .appbar__mark { width: 54px; height: 54px; border-radius: 18px; }
-  .appbar__title { font-size: 29px; }
+  .appbar__title { font-size: 28px; }
   .appbar__tagline { margin-top: 2px; font-size: 13px; }
   .source { min-height: 42px; padding-inline: 11px; font-size: 13px; }
   .filters { gap: 10px; margin-bottom: 12px; }
@@ -407,7 +407,7 @@ a { color: inherit; }
   .filters { margin-inline: -12px; padding-inline: 12px; }
   .appbar { grid-template-columns: 48px minmax(0, 1fr) auto; gap: 8px; }
   .appbar__mark { width: 48px; height: 48px; }
-  .appbar__title { font-size: 26px; }
+  .appbar__title { font-size: 28px; }
   .source { max-width: 90px; font-size: 10px; }
   .notice-calendar { margin-inline: -2px; }
   .notice-calendar__body { padding-inline: 7px; }
