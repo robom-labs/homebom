@@ -1,7 +1,7 @@
 // 청약홈 무순위 공고의 도메인 타입 정의.
 
 /** 공고 유형. 청약홈 HOUSE_SECD 04=무순위, 06=취소후재공급. 잔여세대는 이름으로 판별한다. */
-export type NoticeType = "무순위" | "잔여세대" | "취소후재공급";
+export type NoticeType = "일반공급" | "무순위" | "잔여세대" | "취소후재공급";
 
 /** 화면에 보여줄 공고 상태. 시각과 플래그에서 파생된다. */
 export type NoticeStatus = "예정" | "접수중" | "마감" | "정정" | "취소";
@@ -13,6 +13,25 @@ export type NoticeModelSummary = {
   supplyCount?: number;
   specialSupplyCount?: number;
   priceMax?: number;
+};
+
+export type ApplicationEventKind =
+  | "announce"
+  | "receipt"
+  | "special"
+  | "rank1"
+  | "rank2"
+  | "winner"
+  | "contract";
+
+/** 공고별 모집공고·접수·발표·계약 일정을 한 달력에서 보여주기 위한 표준 일정. */
+export type ApplicationEvent = {
+  kind: ApplicationEventKind;
+  label: string;
+  /** KST 날짜·시각을 변환한 UTC ISO. */
+  start: string;
+  /** 기간 일정일 때만 제공하는 UTC ISO. */
+  end?: string;
 };
 
 export type Notice = {
@@ -73,6 +92,8 @@ export type Notice = {
   newspaperName?: string;
   receiptNote?: string;
   modelSummaries?: NoticeModelSummary[];
+  /** 일반공급의 특별공급·1순위·2순위와 발표·계약까지 포함한 전체 일정. */
+  events?: ApplicationEvent[];
   /** 데이터 확인 시각 (UTC ISO). */
   lastVerifiedAt: string;
 };

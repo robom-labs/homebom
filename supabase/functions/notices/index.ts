@@ -3,8 +3,9 @@
 // 환경변수: supabase secrets set DATA_GO_KR_SERVICE_KEY=...
 
 const API_BASE = "https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1";
-const DETAIL_OPERATION = "getRemndrLttotPblancDetail";
-const MODEL_OPERATION = "getRemndrLttotPblancMdl";
+const REMNDR_DETAIL_OPERATION = "getRemndrLttotPblancDetail";
+const REMNDR_MODEL_OPERATION = "getRemndrLttotPblancMdl";
+const APT_DETAIL_OPERATION = "getAPTLttotPblancDetail";
 const APPLY_HOME_URL = "https://www.applyhome.co.kr";
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const PER_PAGE = 500;
@@ -21,6 +22,13 @@ const RECEIPT_NOTE =
 
 type RawItem = Record<string, unknown>;
 type ApiPage = { data?: RawItem[]; totalCount?: number; currentCount?: number; error?: string };
+type SourceKind = "remndr" | "apt";
+type ApplicationEvent = {
+  kind: "announce" | "receipt" | "special" | "rank1" | "rank2" | "winner" | "contract";
+  label: string;
+  start: string;
+  end?: string;
+};
 
 // 공개 분양자료를 대조한 총세대수다. core의 complexProfiles.ts와 같은 값을 유지한다.
 const COMPLEX_PROFILES = [
@@ -75,15 +83,6 @@ function isRateLimited(ip: string, now: number): boolean {
   }
   bucket.count += 1;
   return bucket.count > RATE_LIMIT_MAX;
-}
-
-function todayKst(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
 }
 
 function kstDateToUtcIso(dateYmd: string, timeHm: string): string {
@@ -160,6 +159,13 @@ function positiveNumber(value: unknown): number | undefined {
   return Number.isFinite(num) && num > 0 ? num : undefined;
 }
 
+function nonNegativeNumber(value: unknown): number | undefined {
+  const normalized = String(value ?? "").replace(/,/g, "").trim();
+  if (!normalized) return undefined;
+  const num = Number(normalized);
+  return Number.isFinite(num) && num >= 0 ? num : undefined;
+}
+
 function serviceKeyParam(): string | null {
   const key = Deno.env.get("DATA_GO_KR_SERVICE_KEY");
   if (!key) return null;
@@ -170,12 +176,18 @@ function serviceKeyParam(): string | null {
   }
 }
 
-async function fetchApiPage(operation: string, serviceKey: string, page: number): Promise<ApiPage> {
+async function fetchApiPage(
+  operation: string,
+  serviceKey: string,
+  page: number,
+  params: Record<string, string> = {},
+): Promise<ApiPage> {
   const url = new URL(`${API_BASE}/${operation}`);
   url.searchParams.set("page", String(page));
   url.searchParams.set("perPage", String(PER_PAGE));
   url.searchParams.set("returnType", "JSON");
   url.searchParams.set("serviceKey", serviceKey);
+  for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
   // 업스트림이 응답하지 않으면 FETCH_TIMEOUT_MS 후 중단해 함수 전체가 매달리지 않게 한다.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -197,12 +209,16 @@ async function fetchApiPage(operation: string, serviceKey: string, page: number)
   return json;
 }
 
-async function fetchAll(operation: string, serviceKey: string): Promise<RawItem[]> {
-  const first = await fetchApiPage(operation, serviceKey, 1);
+async function fetchAll(
+  operation: string,
+  serviceKey: string,
+  params: Record<string, string> = {},
+): Promise<RawItem[]> {
+  const first = await fetchApiPage(operation, serviceKey, 1, params);
   const total = first.totalCount ?? first.data?.length ?? 0;
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
   const rest = await Promise.all(
-    Array.from({ length: pages - 1 }, (_, i) => fetchApiPage(operation, serviceKey, i + 2)),
+    Array.from({ length: pages - 1 }, (_, i) => fetchApiPage(operation, serviceKey, i + 2, params)),
   );
   return [first, ...rest].flatMap((page) => page.data ?? []);
 }
@@ -223,20 +239,85 @@ function normalizeModels(items: RawItem[]) {
     modelNo: text(raw.MODEL_NO),
     houseType: text(raw.HOUSE_TY),
     supplyArea: text(raw.SUPLY_AR),
-    supplyCount: positiveNumber(raw.SUPLY_HSHLDCO),
-    specialSupplyCount: positiveNumber(raw.SPSPLY_HSHLDCO),
+    supplyCount: nonNegativeNumber(raw.SUPLY_HSHLDCO),
+    specialSupplyCount: nonNegativeNumber(raw.SPSPLY_HSHLDCO),
     priceMax: positiveNumber(raw.LTTOT_TOP_AMOUNT),
   }));
 }
 
-function normalize(raw: RawItem, models: RawItem[], verifiedAt: string) {
-  const houseName = text(raw.HOUSE_NM);
-  const start = normalizeYmd(raw.SUBSCRPT_RCEPT_BGNDE);
-  const end = normalizeYmd(raw.SUBSCRPT_RCEPT_ENDDE);
-  if (!houseName || !start || !end) return null;
-  if (end < todayKst()) return null;
+function event(
+  kind: ApplicationEvent["kind"],
+  label: string,
+  startValue: unknown,
+  endValue?: unknown,
+  startTime = "09:00",
+  endTime = "17:30",
+): ApplicationEvent | null {
+  const start = normalizeYmd(startValue);
+  if (!start) return null;
+  const end = normalizeYmd(endValue) ?? start;
+  return {
+    kind,
+    label,
+    start: kstDateToUtcIso(start, startTime),
+    end: kstDateToUtcIso(end, endTime),
+  };
+}
 
-  const identity = noticeIdentity(raw, houseName, start);
+function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
+  const candidates: Array<ApplicationEvent | null> = [
+    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59"),
+    kind === "remndr"
+      ? event("receipt", "청약 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE)
+      : event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE),
+    kind === "apt" ? event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE) : null,
+    kind === "apt" ? event("rank1", "1순위 해당지역", raw.GNRL_RNK1_CRSPAREA_RCPTDE, raw.GNRL_RNK1_CRSPAREA_ENDDE) : null,
+    kind === "apt" ? event("rank1", "1순위 경기지역", raw.GNRL_RNK1_ETC_GG_RCPTDE, raw.GNRL_RNK1_ETC_GG_ENDDE) : null,
+    kind === "apt" ? event("rank1", "1순위 기타지역", raw.GNRL_RNK1_ETC_AREA_RCPTDE, raw.GNRL_RNK1_ETC_AREA_ENDDE) : null,
+    kind === "apt" ? event("rank2", "2순위 해당지역", raw.GNRL_RNK2_CRSPAREA_RCPTDE, raw.GNRL_RNK2_CRSPAREA_ENDDE) : null,
+    kind === "apt" ? event("rank2", "2순위 경기지역", raw.GNRL_RNK2_ETC_GG_RCPTDE, raw.GNRL_RNK2_ETC_GG_ENDDE) : null,
+    kind === "apt" ? event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE) : null,
+    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59"),
+    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30"),
+  ];
+  const seen = new Set<string>();
+  return candidates
+    .filter((item): item is ApplicationEvent => item !== null)
+    .filter((item) => {
+      const key = `${item.kind}|${item.label}|${item.start}|${item.end ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+}
+
+function recentAnnouncementCutoff(days = 120): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function normalize(raw: RawItem, models: RawItem[], verifiedAt: string, kind: SourceKind) {
+  const houseName = text(raw.HOUSE_NM);
+  const events = eventsFor(raw, kind);
+  const receiptEvents = events.filter((item) => ["receipt", "special", "rank1", "rank2"].includes(item.kind));
+  if (!houseName || receiptEvents.length === 0) return null;
+
+  const startEvent = receiptEvents.reduce((min, item) => Date.parse(item.start) < Date.parse(min.start) ? item : min);
+  const endEvent = receiptEvents.reduce((max, item) => Date.parse(item.end ?? item.start) > Date.parse(max.end ?? max.start) ? item : max);
+  const lifecycleEnd = events.reduce((max, item) => Math.max(max, Date.parse(item.end ?? item.start)), 0);
+  if (lifecycleEnd < Date.now()) return null;
+  const startYmd = normalizeYmd(kind === "remndr" ? raw.SUBSCRPT_RCEPT_BGNDE : raw.RCEPT_BGNDE)
+    ?? normalizeYmd(raw.SPSPLY_RCEPT_BGNDE)
+    ?? startEvent.start.slice(0, 10);
+
+  const identity = noticeIdentity(raw, houseName, startYmd);
   const profile = findComplexProfile(houseName, text(raw.HSSPLY_ADRES));
   const modelSummaries = normalizeModels(models);
   const prices = modelSummaries
@@ -248,10 +329,10 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string) {
     legacyIds: identity.legacyIds,
     manageNo: identity.manageNo || undefined,
     pblancNo: identity.pblancNo || undefined,
-    type: resolveType(raw),
+    type: kind === "apt" ? "일반공급" : resolveType(raw),
     officialTypeName: text(raw.HOUSE_SECD_NM),
     housingCategory: "아파트",
-    sourceOperation: DETAIL_OPERATION,
+    sourceOperation: kind === "apt" ? APT_DETAIL_OPERATION : REMNDR_DETAIL_OPERATION,
     houseName,
     region: text(raw.SUBSCRPT_AREA_CODE_NM) || "전국",
     regionCode: text(raw.SUBSCRPT_AREA_CODE),
@@ -260,15 +341,15 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string) {
     totalHouseholdCount: profile?.totalHouseholdCount,
     totalHouseholdSourceUrl: profile?.sourceUrl,
     totalHouseholdVerifiedAt: profile?.verifiedAt,
-    supplyCount: positiveNumber(raw.TOT_SUPLY_HSHLDCO),
+    supplyCount: nonNegativeNumber(raw.TOT_SUPLY_HSHLDCO),
     priceMin: prices.length > 0 ? Math.min(...prices) : undefined,
     priceMax: prices.length > 0 ? Math.max(...prices) : undefined,
     announceDate: text(raw.RCRIT_PBLANC_DE),
-    receiptStart: kstDateToUtcIso(start, "09:00"),
-    receiptEnd: kstDateToUtcIso(end, "17:30"),
-    winnerDate: text(raw.PRZWNER_PRESNATN_DE),
-    contractStartDate: text(raw.CNTRCT_CNCLS_BGNDE),
-    contractEndDate: text(raw.CNTRCT_CNCLS_ENDDE),
+    receiptStart: startEvent.start,
+    receiptEnd: endEvent.end ?? endEvent.start,
+    winnerDate: normalizeYmd(raw.PRZWNER_PRESNATN_DE) ?? undefined,
+    contractStartDate: normalizeYmd(raw.CNTRCT_CNCLS_BGNDE) ?? undefined,
+    contractEndDate: normalizeYmd(raw.CNTRCT_CNCLS_ENDDE) ?? undefined,
     officialHomepageUrl: urlText(raw.HMPG_ADRES),
     businessOwnerName: text(raw.BSNS_MBY_NM),
     contactPhone: text(raw.MDHS_TELNO),
@@ -278,6 +359,7 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string) {
     noticeUrl: urlText(raw.PBLANC_URL),
     receiptNote: RECEIPT_NOTE,
     modelSummaries: modelSummaries.length > 0 ? modelSummaries : undefined,
+    events,
     lastVerifiedAt: verifiedAt,
   };
 }
@@ -291,7 +373,10 @@ Deno.serve(async (req) => {
   }
 
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
-    return new Response(cache.body, headers(200, { "x-verified-at": cache.verifiedAt }));
+    return new Response(cache.body, headers(200, {
+      "cache-control": "public, max-age=60, stale-while-revalidate=300",
+      "x-verified-at": cache.verifiedAt,
+    }));
   }
 
   const serviceKey = serviceKeyParam();
@@ -300,32 +385,49 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const [details, modelItems] = await Promise.all([
-      fetchAll(DETAIL_OPERATION, serviceKey),
-      fetchAll(MODEL_OPERATION, serviceKey),
+    const detailParams = { "cond[RCRIT_PBLANC_DE::GTE]": recentAnnouncementCutoff() };
+    const [remndrDetails, remndrModels, aptDetails] = await Promise.all([
+      fetchAll(REMNDR_DETAIL_OPERATION, serviceKey, detailParams),
+      fetchAll(REMNDR_MODEL_OPERATION, serviceKey),
+      fetchAll(APT_DETAIL_OPERATION, serviceKey, detailParams),
     ]);
-    const modelsByNotice = new Map<string, RawItem[]>();
-    for (const item of modelItems) {
-      const key = modelKey(item);
-      modelsByNotice.set(key, [...(modelsByNotice.get(key) ?? []), item]);
-    }
+    const groupModels = (items: RawItem[]) => {
+      const grouped = new Map<string, RawItem[]>();
+      for (const item of items) {
+        const key = modelKey(item);
+        grouped.set(key, [...(grouped.get(key) ?? []), item]);
+      }
+      return grouped;
+    };
+    const remndrModelsByNotice = groupModels(remndrModels);
 
     const verifiedAt = new Date().toISOString();
-    const notices = details
-      .map((raw) => normalize(raw, modelsByNotice.get(modelKey(raw)) ?? [], verifiedAt))
+    const notices = [
+      ...remndrDetails.map((raw) => normalize(raw, remndrModelsByNotice.get(modelKey(raw)) ?? [], verifiedAt, "remndr")),
+      // 일반공급 주택형 API를 공고별로 반복 호출하면 공공데이터포털 호출량 제한을 넘기므로,
+      // 첫 안정화 단계에서는 상세 공고의 공식 세대·일정만 제공하고 금액·면적은 원문 확인으로 둔다.
+      ...aptDetails.map((raw) => normalize(raw, [], verifiedAt, "apt")),
+    ]
       .filter((notice) => notice !== null)
       .sort((a, b) => Date.parse(a.receiptStart) - Date.parse(b.receiptStart));
 
     const body = JSON.stringify(notices);
     cache = { at: Date.now(), body, verifiedAt };
-    return new Response(body, headers(200, { "x-verified-at": verifiedAt }));
+    return new Response(body, headers(200, {
+      "cache-control": "public, max-age=60, stale-while-revalidate=300",
+      "x-verified-at": verifiedAt,
+    }));
   } catch (err) {
     // stale-if-error: 업스트림 장애 시, TTL이 지난 마지막 성공 응답이 남아 있으면
     // 502 대신 그 복사본을 X-Data-Stale: 1 마커와 함께 서빙한다(응답 형태 동일).
     if (cache) {
       return new Response(
         cache.body,
-        headers(200, { "x-data-stale": "1", "x-verified-at": cache.verifiedAt }),
+        headers(200, {
+          "cache-control": "public, max-age=30, stale-while-revalidate=300",
+          "x-data-stale": "1",
+          "x-verified-at": cache.verifiedAt,
+        }),
       );
     }
     const message = err instanceof Error ? err.message : "청약홈 공고를 불러오지 못했습니다.";

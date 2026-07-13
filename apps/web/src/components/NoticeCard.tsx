@@ -17,6 +17,7 @@ import {
 } from "@zoopzoopcall/core";
 import { DdayStamp } from "./DdayStamp";
 import { CorrectionBadge, StatusBadge, TypeBadge } from "./StatusBadge";
+import { nextNoticeEvent } from "./noticeSchedule";
 
 type Props = {
   notice: Notice;
@@ -65,6 +66,10 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
   const area = areaText ? (distinctAreas.size > 1 ? `${areaText} 외` : areaText) : "면적 확인";
   const houseSpec = [houseType, areaText ? area : null].filter(Boolean).join(" · ") || "공고문 확인";
   const households = formatHouseholdSummary(notice.totalHouseholdCount, notice.supplyCount);
+  const nextEvent = nextNoticeEvent(notice, now);
+  const nextEventText = nextEvent
+    ? `${nextEvent.label} · ${formatKstDate(nextEvent.start)}${Date.parse(nextEvent.start) <= now && Date.parse(nextEvent.end ?? nextEvent.start) >= now ? " 진행 중" : ""}`
+    : "전체 일정 종료";
 
   return (
     <Link
@@ -86,6 +91,7 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
         <div className="card__info-row card__info-row--wide"><dt className="card__label">분양가</dt><dd className={`card__value${price ? " card__value--price" : " card__value--muted"}`}>{price ?? "공고문 확인"}</dd></div>
         <div className="card__info-row"><dt className="card__label">대표형·면적</dt><dd className="card__value">{houseSpec}</dd></div>
         <div className="card__info-row"><dt className="card__label">당첨 발표</dt><dd className="card__value">{notice.winnerDate ? formatKstDate(notice.winnerDate) : "공고문 확인"}</dd></div>
+        <div className="card__info-row"><dt className="card__label">다음 일정</dt><dd className="card__value card__value--next">{nextEventText}</dd></div>
         <div className="card__info-row card__info-row--wide"><dt className="card__label">접수 기간</dt><dd className="card__value">{receiptText(notice)}</dd></div>
       </dl>
       <div className="card__foot">

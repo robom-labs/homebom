@@ -4,6 +4,7 @@ import {
   buildNoticeIdentity,
   kstDateToUtcIso,
   normalizeExternalUrl,
+  normalizeAptItem,
   normalizeRemndrItem,
   normalizeRemndrItems,
   normalizeYmd,
@@ -32,6 +33,43 @@ describe("kstDateToUtcIso", () => {
   it("KST 날짜+시각을 UTC ISO로 변환한다", () => {
     expect(kstDateToUtcIso("2026-07-10", "09:00")).toBe("2026-07-10T00:00:00.000Z");
     expect(kstDateToUtcIso("2026-07-10", "17:30")).toBe("2026-07-10T08:30:00.000Z");
+  });
+});
+
+describe("normalizeAptItem", () => {
+  it("APT 일반공급의 특별공급·순위별 접수와 발표·계약 일정을 보존한다", () => {
+    const notice = normalizeAptItem(
+      {
+        ...raw,
+        HOUSE_SECD: "01",
+        HOUSE_SECD_NM: "APT",
+        RCEPT_BGNDE: "2026-07-10",
+        RCEPT_ENDDE: "2026-07-12",
+        SPSPLY_RCEPT_BGNDE: "2026-07-10",
+        SPSPLY_RCEPT_ENDDE: "2026-07-10",
+        GNRL_RNK1_CRSPAREA_RCPTDE: "2026-07-11",
+        GNRL_RNK1_CRSPAREA_ENDDE: "2026-07-11",
+        GNRL_RNK2_ETC_AREA_RCPTDE: "2026-07-12",
+        GNRL_RNK2_ETC_AREA_ENDDE: "2026-07-12",
+        CNTRCT_CNCLS_BGNDE: "2026-07-20",
+        CNTRCT_CNCLS_ENDDE: "2026-07-22",
+      },
+      VERIFIED,
+      [{ SUPLY_HSHLDCO: 0, SPSPLY_HSHLDCO: 3, HOUSE_TY: "084.9000", LTTOT_TOP_AMOUNT: "70000" }],
+    );
+
+    expect(notice?.type).toBe("일반공급");
+    expect(notice?.receiptStart).toBe("2026-07-10T00:00:00.000Z");
+    expect(notice?.receiptEnd).toBe("2026-07-12T08:30:00.000Z");
+    expect(notice?.events?.map((item) => item.label)).toEqual(
+      expect.arrayContaining(["특별공급", "1순위 해당지역", "2순위 기타지역", "당첨자 발표", "계약"]),
+    );
+    expect(notice?.modelSummaries?.[0].supplyCount).toBe(0);
+    expect(notice?.modelSummaries?.[0].specialSupplyCount).toBe(3);
+  });
+
+  it("접수 일정이 전혀 없는 APT 공고는 제외한다", () => {
+    expect(normalizeAptItem({ ...raw, SUBSCRPT_RCEPT_BGNDE: undefined, SUBSCRPT_RCEPT_ENDDE: undefined }, VERIFIED)).toBeNull();
   });
 });
 

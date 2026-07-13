@@ -7,6 +7,7 @@ import {
   DEFAULT_OPEN_OFFSETS,
   formatArea,
   formatHouseTypeLabel,
+  formatKstDate,
   formatKstDateTime,
   formatManwon,
   formatPriceRange,
@@ -26,6 +27,7 @@ import {
   type PermissionState,
 } from "../notify/notifications";
 import type { useSubscriptions } from "../hooks/useSubscriptions";
+import { noticeSchedule } from "../components/noticeSchedule";
 
 type Props = {
   notices: Notice[];
@@ -76,14 +78,18 @@ export function DetailScreen({ notices, subscriptions }: Props) {
 
   const housingCategory = inferHousingCategory(notice.housingCategory, notice.sourceOperation);
   const receiptStartLabel = formatKstDateTime(notice.receiptStart);
+  const schedule = noticeSchedule(notice);
+  const mapUrl = notice.address
+    ? `https://map.naver.com/p/search/${encodeURIComponent(notice.address)}`
+    : null;
   const rows: Array<[string, string | undefined]> = [
     ["청약 유형", notice.type],
     ["주택 형태", housingCategory],
     ["지역", notice.region],
     ["위치", notice.address],
     ["우편번호", notice.zipCode],
-    ["단지 전체", notice.totalHouseholdCount ? `${notice.totalHouseholdCount.toLocaleString("ko-KR")}세대` : "공고문 확인"],
-    ["이번 모집", notice.supplyCount ? `${notice.supplyCount.toLocaleString("ko-KR")}세대` : "공고문 확인"],
+    ["단지 전체", notice.totalHouseholdCount != null ? `${notice.totalHouseholdCount.toLocaleString("ko-KR")}세대` : "공고문 확인"],
+    ["이번 모집", notice.supplyCount != null ? `${notice.supplyCount.toLocaleString("ko-KR")}세대` : "공고문 확인"],
     ["분양가", formatPriceRange(notice) ?? "공고문 확인"],
     ["모집공고일", notice.announceDate],
     ["접수 시작", formatKstDateTime(notice.receiptStart)],
@@ -205,6 +211,11 @@ export function DetailScreen({ notices, subscriptions }: Props) {
             공식 홈페이지 보기
           </a>
         )}
+        {mapUrl && (
+          <a className="btn btn--ghost btn--big" href={mapUrl} target="_blank" rel="noreferrer">
+            지도에서 위치 보기
+          </a>
+        )}
         {notice.totalHouseholdSourceUrl && (
           <a className="btn btn--ghost btn--big" href={notice.totalHouseholdSourceUrl} target="_blank" rel="noreferrer">
             단지 규모 출처 보기
@@ -227,6 +238,23 @@ export function DetailScreen({ notices, subscriptions }: Props) {
           ))}
       </section>
 
+      <section className="detail__schedule" aria-labelledby="detail-schedule-title">
+        <h2 id="detail-schedule-title">청약 전체 일정</h2>
+        <p>접수뿐 아니라 발표와 계약까지 한 번에 확인하세요.</p>
+        <ol>
+          {schedule.map((item) => {
+            const start = formatKstDate(item.start);
+            const end = formatKstDate(item.end ?? item.start);
+            return (
+              <li key={`${item.kind}-${item.label}-${item.start}`}>
+                <span className={`schedule-dot schedule-dot--${item.kind}`} aria-hidden="true" />
+                <div><strong>{item.label}</strong><small>{start === end ? start : `${start} ~ ${end}`}</small></div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
       {notice.modelSummaries && notice.modelSummaries.length > 0 && (
         <section className="detail__models">
           <h2>주택형·분양가</h2>
@@ -238,8 +266,8 @@ export function DetailScreen({ notices, subscriptions }: Props) {
               </div>
               <div>
                 <span>
-                  {model.supplyCount ? `일반 ${model.supplyCount}세대` : "일반공급 확인 필요"}
-                  {model.specialSupplyCount ? ` · 특별 ${model.specialSupplyCount}세대` : ""}
+                  {model.supplyCount != null ? `일반 ${model.supplyCount}세대` : "일반공급 확인 필요"}
+                  {model.specialSupplyCount != null ? ` · 특별 ${model.specialSupplyCount}세대` : ""}
                 </span>
                 <strong>{model.priceMax ? formatManwon(model.priceMax) : "금액 확인 필요"}</strong>
               </div>

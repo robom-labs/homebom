@@ -1,7 +1,7 @@
 // 이번 달 접수 일정을 모바일에서는 접어서, 데스크톱에서는 펼쳐 보여주는 청약봄 월(月) 캘린더다.
 import { useEffect, useState } from "react";
 import type { Notice } from "@zoopzoopcall/core";
-import { buildMonthGrid, WEEKDAYS } from "./noticeCalendar.model";
+import { buildMonthGrid, calendarDateKey, WEEKDAYS } from "./noticeCalendar.model";
 
 // calendarDateKey는 ListScreen 날짜 필터가 함께 쓰므로 여기서 재수출한다.
 export { calendarDateKey } from "./noticeCalendar.model";
@@ -14,12 +14,23 @@ type Props = {
 };
 
 export function NoticeCalendar({ notices, now, selectedKey, onSelectDay }: Props) {
-  const grid = buildMonthGrid(now, notices);
+  const today = calendarDateKey(now);
+  const [viewMonth, setViewMonth] = useState(() => ({
+    year: Number(today.slice(0, 4)),
+    month: Number(today.slice(5, 7)),
+  }));
+  const grid = buildMonthGrid(now, notices, viewMonth.year, viewMonth.month);
   const [expanded, setExpanded] = useState(
     () => typeof window === "undefined" || window.innerWidth >= 600,
   );
-  const starts = grid.cells.reduce((sum, cell) => sum + cell.starts, 0);
-  const ends = grid.cells.reduce((sum, cell) => sum + cell.ends, 0);
+  const winners = grid.cells.reduce((sum, cell) => sum + cell.winners, 0);
+  const moveMonth = (delta: number) => {
+    setViewMonth((current) => {
+      const date = new Date(Date.UTC(current.year, current.month - 1 + delta, 1));
+      return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+    });
+    onSelectDay?.(null);
+  };
 
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 600px)");
@@ -41,20 +52,23 @@ export function NoticeCalendar({ notices, now, selectedKey, onSelectDay }: Props
       >
         <span>
           <strong>이번 달 일정</strong>
-          <small>{grid.label} · 접수 {starts}건 · 마감 {ends}건</small>
+          <small>{grid.label} · 공고 {grid.noticeCount}건 · 발표 {winners}건</small>
         </span>
-        <span className="notice-calendar__summary-action">{expanded ? "접기" : "보기"}</span>
+          <span className="notice-calendar__summary-action">{expanded ? "접기" : "달력 보기"}</span>
       </button>
       <div className="notice-calendar__body" hidden={!expanded}>
         <div className="notice-calendar__head">
-          <div>
+          <button type="button" className="notice-calendar__move" aria-label="이전 달" onClick={() => moveMonth(-1)}>‹</button>
+          <div className="notice-calendar__month-title">
             <p>이번 달 접수</p>
             <h2 id="calendar-title">{grid.label}</h2>
           </div>
           <span className="notice-calendar__legend">
             <i className="notice-calendar__dot notice-calendar__dot--start" />접수
             <i className="notice-calendar__dot notice-calendar__dot--end" />마감
+            <i className="notice-calendar__dot notice-calendar__dot--winner" />발표
           </span>
+          <button type="button" className="notice-calendar__move" aria-label="다음 달" onClick={() => moveMonth(1)}>›</button>
         </div>
         <div className="notice-calendar__dow" aria-hidden="true">
           {WEEKDAYS.map((label, index) => (
@@ -71,11 +85,13 @@ export function NoticeCalendar({ notices, now, selectedKey, onSelectDay }: Props
             if (!cell.inMonth) {
               return <span className="notice-calendar__blank" key={`blank-${index}`} aria-hidden="true" />;
             }
-            const count = cell.starts + cell.ends;
+            const count = cell.starts + cell.ends + cell.winners + cell.contracts;
             const selected = selectedKey === cell.key;
             const detail = [
               cell.starts ? `접수 ${cell.starts}건` : "",
               cell.ends ? `마감 ${cell.ends}건` : "",
+              cell.winners ? `발표 ${cell.winners}건` : "",
+              cell.contracts ? `계약 ${cell.contracts}건` : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -93,6 +109,8 @@ export function NoticeCalendar({ notices, now, selectedKey, onSelectDay }: Props
                 <span className="notice-calendar__marks" aria-hidden="true">
                   {cell.starts > 0 && <i className="notice-calendar__dot notice-calendar__dot--start" />}
                   {cell.ends > 0 && <i className="notice-calendar__dot notice-calendar__dot--end" />}
+                  {cell.winners > 0 && <i className="notice-calendar__dot notice-calendar__dot--winner" />}
+                  {cell.contracts > 0 && <i className="notice-calendar__dot notice-calendar__dot--contract" />}
                 </span>
               </button>
             );

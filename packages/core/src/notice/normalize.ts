@@ -1,5 +1,5 @@
 // 청약홈 API(15098547) 원시 응답을 Notice로 정규화하는 순수함수.
-import type { Notice, NoticeModelSummary, NoticeType } from "./types";
+import type { ApplicationEvent, Notice, NoticeModelSummary, NoticeType } from "./types";
 import { findComplexProfile } from "./complexProfiles";
 
 /**
@@ -30,6 +30,25 @@ export type RawRemndrItem = {
   MVN_PREARNGE_YM?: string;
   PBLANC_URL?: string;
   [key: string]: unknown;
+};
+
+export type RawAptItem = RawRemndrItem & {
+  RCEPT_BGNDE?: string;
+  RCEPT_ENDDE?: string;
+  SPSPLY_RCEPT_BGNDE?: string;
+  SPSPLY_RCEPT_ENDDE?: string;
+  GNRL_RNK1_CRSPAREA_RCPTDE?: string;
+  GNRL_RNK1_CRSPAREA_ENDDE?: string;
+  GNRL_RNK1_ETC_GG_RCPTDE?: string;
+  GNRL_RNK1_ETC_GG_ENDDE?: string;
+  GNRL_RNK1_ETC_AREA_RCPTDE?: string;
+  GNRL_RNK1_ETC_AREA_ENDDE?: string;
+  GNRL_RNK2_CRSPAREA_RCPTDE?: string;
+  GNRL_RNK2_CRSPAREA_ENDDE?: string;
+  GNRL_RNK2_ETC_GG_RCPTDE?: string;
+  GNRL_RNK2_ETC_GG_ENDDE?: string;
+  GNRL_RNK2_ETC_AREA_RCPTDE?: string;
+  GNRL_RNK2_ETC_AREA_ENDDE?: string;
 };
 
 export type RawRemndrModelItem = {
@@ -134,15 +153,79 @@ function optionalPositiveNumber(value: unknown): number | undefined {
   return Number.isFinite(num) && num > 0 ? num : undefined;
 }
 
+function optionalNonNegativeNumber(value: unknown): number | undefined {
+  const normalized = String(value ?? "").replace(/,/g, "").trim();
+  if (!normalized) return undefined;
+  const num = Number(normalized);
+  return Number.isFinite(num) && num >= 0 ? num : undefined;
+}
+
 export function normalizeRemndrModels(items: RawRemndrModelItem[]): NoticeModelSummary[] {
   return items.map((raw) => ({
     modelNo: optionalText(raw.MODEL_NO),
     houseType: optionalText(raw.HOUSE_TY),
     supplyArea: optionalText(raw.SUPLY_AR),
-    supplyCount: optionalPositiveNumber(raw.SUPLY_HSHLDCO),
-    specialSupplyCount: optionalPositiveNumber(raw.SPSPLY_HSHLDCO),
+    supplyCount: optionalNonNegativeNumber(raw.SUPLY_HSHLDCO),
+    specialSupplyCount: optionalNonNegativeNumber(raw.SPSPLY_HSHLDCO),
     priceMax: optionalPositiveNumber(raw.LTTOT_TOP_AMOUNT),
   }));
+}
+
+function event(
+  kind: ApplicationEvent["kind"],
+  label: string,
+  startValue: unknown,
+  endValue?: unknown,
+  startTime = DEFAULT_RECEIPT_START_KST,
+  endTime = DEFAULT_RECEIPT_END_KST,
+): ApplicationEvent | null {
+  const start = normalizeYmd(startValue);
+  if (!start) return null;
+  const end = normalizeYmd(endValue) ?? start;
+  return {
+    kind,
+    label,
+    start: kstDateToUtcIso(start, startTime),
+    end: kstDateToUtcIso(end, endTime),
+  };
+}
+
+function dedupeEvents(events: Array<ApplicationEvent | null>): ApplicationEvent[] {
+  const seen = new Set<string>();
+  return events
+    .filter((item): item is ApplicationEvent => item !== null)
+    .filter((item) => {
+      const key = `${item.kind}|${item.label}|${item.start}|${item.end ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+}
+
+export function buildRemndrEvents(raw: RawRemndrItem): ApplicationEvent[] {
+  return dedupeEvents([
+    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59"),
+    event("receipt", "청약 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE),
+    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59"),
+    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30"),
+  ]);
+}
+
+export function buildAptEvents(raw: RawAptItem): ApplicationEvent[] {
+  return dedupeEvents([
+    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59"),
+    event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE),
+    event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE),
+    event("rank1", "1순위 해당지역", raw.GNRL_RNK1_CRSPAREA_RCPTDE, raw.GNRL_RNK1_CRSPAREA_ENDDE),
+    event("rank1", "1순위 경기지역", raw.GNRL_RNK1_ETC_GG_RCPTDE, raw.GNRL_RNK1_ETC_GG_ENDDE),
+    event("rank1", "1순위 기타지역", raw.GNRL_RNK1_ETC_AREA_RCPTDE, raw.GNRL_RNK1_ETC_AREA_ENDDE),
+    event("rank2", "2순위 해당지역", raw.GNRL_RNK2_CRSPAREA_RCPTDE, raw.GNRL_RNK2_CRSPAREA_ENDDE),
+    event("rank2", "2순위 경기지역", raw.GNRL_RNK2_ETC_GG_RCPTDE, raw.GNRL_RNK2_ETC_GG_ENDDE),
+    event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE),
+    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59"),
+    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30"),
+  ]);
 }
 
 /**
@@ -164,6 +247,7 @@ export function normalizeRemndrItem(
   const supply = optionalPositiveNumber(raw.TOT_SUPLY_HSHLDCO);
   const profile = findComplexProfile(houseName, raw.HSSPLY_ADRES?.trim());
   const modelSummaries = normalizeRemndrModels(modelItems);
+  const events = buildRemndrEvents(raw);
   const prices = modelSummaries
     .map((m) => m.priceMax)
     .filter((price): price is number => typeof price === "number");
@@ -203,6 +287,62 @@ export function normalizeRemndrItem(
     noticeUrl: normalizeExternalUrl(raw.PBLANC_URL),
     receiptNote: RECEIPT_NOTE,
     modelSummaries: modelSummaries.length > 0 ? modelSummaries : undefined,
+    events,
+    lastVerifiedAt: verifiedAt,
+  };
+}
+
+/** APT 일반공급 상세 응답을 특별공급·순위별 접수 일정까지 포함한 Notice로 변환한다. */
+export function normalizeAptItem(
+  raw: RawAptItem,
+  verifiedAt: string,
+  modelItems: RawRemndrModelItem[] = [],
+): Notice | null {
+  const houseName = raw.HOUSE_NM?.trim();
+  const events = buildAptEvents(raw);
+  const receiptEvents = events.filter((item) => ["receipt", "special", "rank1", "rank2"].includes(item.kind));
+  if (!houseName || receiptEvents.length === 0) return null;
+
+  const start = receiptEvents.reduce((min, item) => Date.parse(item.start) < Date.parse(min.start) ? item : min);
+  const end = receiptEvents.reduce((max, item) => Date.parse(item.end ?? item.start) > Date.parse(max.end ?? max.start) ? item : max);
+  const startYmd = normalizeYmd(raw.RCEPT_BGNDE) ?? normalizeYmd(raw.SPSPLY_RCEPT_BGNDE) ?? start.start.slice(0, 10);
+  const identity = buildNoticeIdentity(raw, houseName, startYmd);
+  const modelSummaries = normalizeRemndrModels(modelItems);
+  const prices = modelSummaries.map((item) => item.priceMax).filter((price): price is number => typeof price === "number");
+
+  return {
+    id: identity.id,
+    legacyIds: identity.legacyIds,
+    manageNo: identity.manageNo || undefined,
+    pblancNo: identity.pblancNo || undefined,
+    type: "일반공급",
+    officialTypeName: raw.HOUSE_SECD_NM?.trim(),
+    housingCategory: "아파트",
+    sourceOperation: "getAPTLttotPblancDetail",
+    houseName,
+    region: raw.SUBSCRPT_AREA_CODE_NM?.trim() || "전국",
+    regionCode: raw.SUBSCRPT_AREA_CODE?.trim(),
+    zipCode: raw.HSSPLY_ZIP?.trim(),
+    address: raw.HSSPLY_ADRES?.trim(),
+    supplyCount: optionalNonNegativeNumber(raw.TOT_SUPLY_HSHLDCO),
+    priceMin: prices.length > 0 ? Math.min(...prices) : undefined,
+    priceMax: prices.length > 0 ? Math.max(...prices) : undefined,
+    announceDate: normalizeYmd(raw.RCRIT_PBLANC_DE) ?? undefined,
+    receiptStart: start.start,
+    receiptEnd: end.end ?? end.start,
+    winnerDate: normalizeYmd(raw.PRZWNER_PRESNATN_DE) ?? undefined,
+    contractStartDate: normalizeYmd(raw.CNTRCT_CNCLS_BGNDE) ?? undefined,
+    contractEndDate: normalizeYmd(raw.CNTRCT_CNCLS_ENDDE) ?? undefined,
+    officialHomepageUrl: normalizeExternalUrl(raw.HMPG_ADRES),
+    businessOwnerName: raw.BSNS_MBY_NM?.trim(),
+    contactPhone: raw.MDHS_TELNO?.trim(),
+    moveInMonth: raw.MVN_PREARNGE_YM?.trim(),
+    newspaperName: raw.NSPRC_NM?.trim(),
+    applyHomeUrl: APPLY_HOME_URL,
+    noticeUrl: normalizeExternalUrl(raw.PBLANC_URL),
+    receiptNote: RECEIPT_NOTE,
+    modelSummaries: modelSummaries.length > 0 ? modelSummaries : undefined,
+    events,
     lastVerifiedAt: verifiedAt,
   };
 }

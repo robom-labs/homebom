@@ -64,4 +64,17 @@ describe("buildMonthGrid", () => {
     ]);
     expect(grid.cells.every((c) => c.starts === 0 && c.ends === 0)).toBe(true);
   });
+
+  it("다른 달로 이동하고 당첨자 발표·계약 일정을 함께 집계한다", () => {
+    const item = notice("d", "2026-08-03T00:00:00.000Z", "2026-08-05T08:30:00.000Z");
+    item.events = [
+      { kind: "receipt", label: "청약 접수", start: item.receiptStart, end: item.receiptEnd },
+      { kind: "winner", label: "당첨자 발표", start: "2026-08-10T15:00:00.000Z", end: "2026-08-11T14:59:00.000Z" },
+      { kind: "contract", label: "계약", start: "2026-08-19T00:00:00.000Z", end: "2026-08-21T08:30:00.000Z" },
+    ];
+    const grid = buildMonthGrid(NOW, [item], 2026, 8);
+    expect(grid.label).toBe("2026년 8월");
+    expect(grid.cells.find((c) => c.key === "2026-08-11")).toMatchObject({ winners: 1 });
+    expect(grid.cells.find((c) => c.key === "2026-08-19")).toMatchObject({ contracts: 1 });
+  });
 });

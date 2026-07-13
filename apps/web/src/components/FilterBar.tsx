@@ -15,7 +15,14 @@ type Props = {
   counts: Record<StatusView, number>;
 };
 
-const TYPES: TypeFilter[] = ["전체", "무순위", "잔여세대", "취소후재공급"];
+const TYPES: TypeFilter[] = ["전체", "일반공급", "무순위", "잔여세대", "취소후재공급"];
+const TYPE_LABEL: Record<TypeFilter, string> = {
+  전체: "전체",
+  일반공급: "일반공급",
+  무순위: "무순위",
+  잔여세대: "잔여세대",
+  취소후재공급: "취소 재공급",
+};
 const STATUS_VIEWS: StatusView[] = ["접수중", "접수예정", "마감·취소"];
 const STATUS_LABEL: Record<StatusView, string> = {
   접수중: "접수 중",
@@ -45,7 +52,7 @@ export function FilterBar({
               className={`chip${activeType === t ? " chip--active" : ""}`}
               onClick={() => onType(t)}
             >
-              {t}
+              {TYPE_LABEL[t]}
             </button>
           ))}
         </div>

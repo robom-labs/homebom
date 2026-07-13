@@ -5,8 +5,9 @@ import { getNoticeStatus } from "@zoopzoopcall/core";
 import { AppHeader } from "../components/AppHeader";
 import { FilterBar, type StatusView, type TypeFilter } from "../components/FilterBar";
 import { NoticeCard } from "../components/NoticeCard";
-import { NoticeCalendar, calendarDateKey } from "../components/NoticeCalendar";
+import { NoticeCalendar } from "../components/NoticeCalendar";
 import { PermissionBanner } from "../components/PermissionBanner";
+import { noticeHasScheduleOn } from "../components/noticeSchedule";
 import { useNow } from "../hooks/useNow";
 import type { NoticeSource } from "../hooks/useNotices";
 import type { SubMap } from "../store/subscriptions";
@@ -33,7 +34,7 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
   const [region, setRegion] = useState("전체");
   const [statusView, setStatusView] = useState<StatusView>("접수중");
   const [touched, setTouched] = useState(false);
-  // 캘린더에서 고른 날짜(KST YYYY-MM-DD). 선택 시 그날 접수·마감 공고만 리스트로 보여준다.
+  // 캘린더에서 고른 날짜(KST YYYY-MM-DD). 선택 시 그날 접수·발표·계약 공고만 리스트로 보여준다.
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const regions = useMemo(
@@ -91,15 +92,11 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
 
   const active = groups[statusView];
 
-  // 캘린더에서 고른 날짜의 접수 시작·마감 공고(마감 임박 순).
+  // 캘린더에서 고른 날짜의 접수·발표·계약 공고(마감 임박 순).
   const dayNotices = useMemo(() => {
     if (!selectedDay) return [];
     return filtered
-      .filter(
-        (n) =>
-          calendarDateKey(n.receiptStart) === selectedDay ||
-          calendarDateKey(n.receiptEnd) === selectedDay,
-      )
+      .filter((n) => noticeHasScheduleOn(n, selectedDay))
       .sort((a, b) => Date.parse(a.receiptEnd) - Date.parse(b.receiptEnd));
   }, [filtered, selectedDay]);
 
@@ -122,6 +119,15 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
 
       <PermissionBanner compact hidePrompt />
 
+      {!loading && (
+        <NoticeCalendar
+          notices={filtered}
+          now={now}
+          selectedKey={selectedDay}
+          onSelectDay={setSelectedDay}
+        />
+      )}
+
       {notices.length > 0 && (
         <FilterBar
           activeType={type}
@@ -132,15 +138,6 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
           statusView={statusView}
           onStatusView={onStatusView}
           counts={counts}
-        />
-      )}
-
-      {!loading && (
-        <NoticeCalendar
-          notices={filtered}
-          now={now}
-          selectedKey={selectedDay}
-          onSelectDay={setSelectedDay}
         />
       )}
 
@@ -168,12 +165,12 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
       {!loading && filtered.length > 0 && selectedDay && (
         <section className="opportunities" aria-labelledby="notice-list-title">
           <div className="section-heading">
-            <h2 id="notice-list-title">{dayLabel} 접수·마감 공고</h2>
+            <h2 id="notice-list-title">{dayLabel} 전체 일정</h2>
             <button type="button" className="day-clear" onClick={() => setSelectedDay(null)}>전체 보기</button>
           </div>
           {dayNotices.length > 0
             ? dayNotices.map((n) => <NoticeCard key={n.id} notice={n} now={now} subscribed={n.id in subs} />)
-            : <p className="section-empty">{dayLabel}에는 접수·마감 공고가 없어요.</p>}
+            : <p className="section-empty">{dayLabel}에는 접수·발표·계약 일정이 없어요.</p>}
         </section>
       )}
 

@@ -1,10 +1,20 @@
 // @zoopzoopcall/core 공개 API. 전부 플랫폼 무관 순수함수다.
-export type { Notice, NoticeType, NoticeStatus, NoticeModelSummary } from "./notice/types";
+export type {
+  ApplicationEvent,
+  ApplicationEventKind,
+  Notice,
+  NoticeType,
+  NoticeStatus,
+  NoticeModelSummary,
+} from "./notice/types";
 export { getNoticeStatus, isClosingSoon } from "./notice/status";
 export {
   normalizeRemndrItem,
   normalizeRemndrItems,
   normalizeRemndrModels,
+  normalizeAptItem,
+  buildAptEvents,
+  buildRemndrEvents,
   resolveNoticeType,
   kstDateToUtcIso,
   normalizeYmd,
@@ -13,7 +23,7 @@ export {
   APPLY_HOME_URL,
   RECEIPT_NOTE,
 } from "./notice/normalize";
-export type { RawRemndrItem, RawRemndrModelItem } from "./notice/normalize";
+export type { RawAptItem, RawRemndrItem, RawRemndrModelItem } from "./notice/normalize";
 export { formatPriceRange } from "./notice/price";
 export { formatArea, pyeongFromSqm, SQM_PER_PYEONG } from "./notice/area";
 export {
