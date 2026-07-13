@@ -1,6 +1,6 @@
 // 구독된 공고의 알림 시각을 감시해 도래하면 웹 알림을 울리는 스케줄러.
 import type { Notice, NoticeAlert } from "@zoopzoopcall/core";
-import { buildNoticeAlerts } from "@zoopzoopcall/core";
+import { buildEventAlerts, buildNoticeAlerts } from "@zoopzoopcall/core";
 import type { NoticeSnapshotMap, SubMap } from "../store/subscriptions";
 import { loadFired, markFired } from "../store/subscriptions";
 import { notificationSupport, showAppNotification } from "./notifications";
@@ -36,6 +36,10 @@ export function collectPendingAlerts(
     if (!notice || notice.cancelled) continue;
     out.push(...buildNoticeAlerts(notice, "open", entry.open, now));
     out.push(...buildNoticeAlerts(notice, "close", entry.close, now));
+    if (entry.eventIds?.length) {
+      const selected = (notice.events ?? []).filter((item) => item.id && entry.eventIds?.includes(item.id));
+      out.push(...buildEventAlerts(notice, selected, now));
+    }
   }
   return out.sort((a, b) => a.fireAt - b.fireAt);
 }

@@ -1,7 +1,7 @@
 // 접수 시작·마감 알림 시각을 계산하는 순수함수. 과거 시각은 예약하지 않는다.
-import type { Notice } from "../notice/types";
+import type { ApplicationEvent, Notice } from "../notice/types";
 
-export type AlertKind = "open" | "close";
+export type AlertKind = "open" | "close" | "event";
 
 export type NoticeAlert = {
   /** noticeId:kind:offset 형태의 결정적 ID. 중복 발송 방지에 쓴다. */
@@ -39,6 +39,7 @@ export function buildNoticeAlerts(
   offsetsMinutes: number[],
   now: number,
 ): NoticeAlert[] {
+  if (kind === "event") return [];
   const target = Date.parse(kind === "open" ? notice.receiptStart : notice.receiptEnd);
   return offsetsMinutes
     .map((off) => {
@@ -64,4 +65,23 @@ export function buildNoticeAlerts(
       };
     })
     .filter((a) => a.fireAt > now);
+}
+
+/** 선택한 세부 일정에 대해 하루 전·한 시간 전 알림을 만든다. */
+export function buildEventAlerts(
+  notice: Notice,
+  events: ApplicationEvent[],
+  now: number,
+  offsetsMinutes = [1440, 60],
+): NoticeAlert[] {
+  return events.flatMap((event) => offsetsMinutes.map((off) => ({
+    id: `${event.id ?? `${notice.id}:${event.kind}`}:event:${off}`,
+    noticeId: notice.id,
+    kind: "event" as const,
+    offsetMinutes: off,
+    fireAt: Date.parse(event.start) - off * 60_000,
+    title: `[${notice.houseName}] ${event.label} ${offsetLabel(off)} 전`,
+    body: "청약홈 모집공고 원문에서 대상 지역과 신청 조건을 확인하세요.",
+    url: notice.noticeUrl ?? notice.applyHomeUrl,
+  }))).filter((alert) => alert.fireAt > now);
 }

@@ -2,9 +2,9 @@
 
 ## 사람이 해야 하는 것 (Claude Code가 대신 못 함)
 
-- [ ] 공공데이터포털에서 청약홈 API(15098547) 활용신청 → 서비스키 발급 (무료, 즉시승인).
-- [ ] Supabase 무료 프로젝트 생성 → `supabase functions deploy notices` + `supabase secrets set DATA_GO_KR_SERVICE_KEY=...` (절차: DEPLOY.md).
-- [ ] 배포된 함수 URL을 `apps/web/.env`의 `VITE_NOTICES_URL`에 넣고 재빌드·재배포 → 실공고 전환.
+- [x] 공공데이터포털 청약홈 API(15098547) 서비스키 연결.
+- [x] Supabase Edge Function `notices`와 일반공급 주택형 서버 캐시 배포.
+- [x] GitHub Pages 프로덕션 번들에 공개 함수 URL 연결.
 - [ ] (v0.5.0 대비) 구글 계정으로 애드몹 가입, 플레이스토어 개발자 등록($25).
 
 ## v0.1.0 후속 개선 후보

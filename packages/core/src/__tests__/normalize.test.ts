@@ -55,7 +55,14 @@ describe("normalizeAptItem", () => {
         CNTRCT_CNCLS_ENDDE: "2026-07-22",
       },
       VERIFIED,
-      [{ SUPLY_HSHLDCO: 0, SPSPLY_HSHLDCO: 3, HOUSE_TY: "084.9000", LTTOT_TOP_AMOUNT: "70000" }],
+      [{
+        SUPLY_HSHLDCO: 0,
+        SPSPLY_HSHLDCO: 3,
+        NWWDS_HSHLDCO: 0,
+        NWBB_HSHLDCO: 2,
+        HOUSE_TY: "084.9000",
+        LTTOT_TOP_AMOUNT: "70000",
+      }],
     );
 
     expect(notice?.type).toBe("일반공급");
@@ -66,6 +73,10 @@ describe("normalizeAptItem", () => {
     );
     expect(notice?.modelSummaries?.[0].supplyCount).toBe(0);
     expect(notice?.modelSummaries?.[0].specialSupplyCount).toBe(3);
+    expect(notice?.modelSummaries?.[0].specialSupply?.newlywed).toBe(0);
+    expect(notice?.modelSummaries?.[0].specialSupply?.newborn).toBe(2);
+    expect(notice?.events?.every((item) => item.id?.startsWith(`${notice.id}:`))).toBe(true);
+    expect(notice?.events?.find((item) => item.kind === "rank1")?.regionScope).toBe("local");
   });
 
   it("접수 일정이 전혀 없는 APT 공고는 제외한다", () => {
@@ -89,8 +100,8 @@ describe("normalizeYmd", () => {
 });
 
 describe("resolveNoticeType", () => {
-  it("HOUSE_SECD 06은 취소후재공급", () => {
-    expect(resolveNoticeType({ HOUSE_SECD: "06" })).toBe("취소후재공급");
+  it("HOUSE_SECD 06은 불법행위 재공급", () => {
+    expect(resolveNoticeType({ HOUSE_SECD: "06" })).toBe("불법행위 재공급");
   });
 
   it("이름에 잔여가 들어가면 잔여세대", () => {
@@ -115,6 +126,9 @@ describe("normalizeRemndrItem", () => {
     expect(n!.receiptStart).toBe("2026-07-10T00:00:00.000Z");
     expect(n!.receiptEnd).toBe("2026-07-10T08:30:00.000Z");
     expect(n!.lastVerifiedAt).toBe(VERIFIED);
+    expect(n!.events?.find((item) => item.kind === "no-priority")?.id).toBe(
+      "2026000001-1:SUBSCRPT_RCEPT_BGNDE",
+    );
   });
 
   it("접수일이 YYYYMMDD로 와도 동일하게 변환한다", () => {

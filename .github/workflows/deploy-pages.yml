@@ -42,6 +42,8 @@ jobs:
         run: pnpm test
 
       - name: Build (base "/homebom/" 유지)
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
         run: pnpm -r build
 
       - name: base path 유지 검증 (깨졌으면 배포 중단)

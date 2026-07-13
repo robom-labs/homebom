@@ -15,6 +15,9 @@ import {
   inferHousingCategory,
   isClosingSoon,
   offsetLabel,
+  addressSearchCandidates,
+  kakaoMapSearchUrl,
+  naverMapSearchUrl,
   type AlertKind,
 } from "@zoopzoopcall/core";
 import { Countdown } from "../components/Countdown";
@@ -39,6 +42,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
   const navigate = useNavigate();
   const now = useNow(15_000);
   const [permission, setPermission] = useState<PermissionState>(() => notificationSupport());
+  const [mapOpen, setMapOpen] = useState(false);
   const notice = notices.find((n) => n.id === id);
 
   if (!notice) {
@@ -71,7 +75,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
     if (nextPermission === "granted") subscribe(notice);
   };
 
-  const onOffset = (kind: AlertKind, off: number) => {
+  const onOffset = (kind: Exclude<AlertKind, "event">, off: number) => {
     if (!subscribed) return;
     toggleOffset(notice.id, kind, off);
   };
@@ -79,9 +83,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
   const housingCategory = inferHousingCategory(notice.housingCategory, notice.sourceOperation);
   const receiptStartLabel = formatKstDateTime(notice.receiptStart);
   const schedule = noticeSchedule(notice);
-  const mapUrl = notice.address
-    ? `https://map.naver.com/p/search/${encodeURIComponent(notice.address)}`
-    : null;
+  const mapCandidates = addressSearchCandidates(notice.address, notice.houseName, notice.region);
   const rows: Array<[string, string | undefined]> = [
     ["청약 유형", notice.type],
     ["주택 형태", housingCategory],
@@ -142,7 +144,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
       )}
 
       {!finished && (
-        <section className="alerts-card">
+        <section className="alerts-card" id="alerts">
           <div className="alerts-card__head">
             <h2>알림 받기</h2>
             <button
@@ -197,6 +199,17 @@ export function DetailScreen({ notices, subscriptions }: Props) {
                 </div>
               </div>
               <p className="fineprint">이미 지난 시각의 알림은 예약되지 않아요.</p>
+              <div className="alerts-card__group">
+                <h3>세부 일정 <small>선택한 일정은 하루 전과 한 시간 전에 알려드려요.</small></h3>
+                <div className="event-alerts">
+                  {schedule.filter((item) => item.id && ["special", "rank1", "rank2", "no-priority", "winner", "contract"].includes(item.kind)).map((item) => (
+                    <label key={item.id}>
+                      <input type="checkbox" checked={entry.eventIds?.includes(item.id!) ?? false} onChange={() => subscriptions.toggleEvent(notice.id, item.id!)} />
+                      <span><strong>{item.label}</strong><small>{formatKstDate(item.start)}</small></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </>
           )}
         </section>
@@ -211,10 +224,10 @@ export function DetailScreen({ notices, subscriptions }: Props) {
             공식 홈페이지 보기
           </a>
         )}
-        {mapUrl && (
-          <a className="btn btn--ghost btn--big" href={mapUrl} target="_blank" rel="noreferrer">
-            지도에서 위치 보기
-          </a>
+        {mapCandidates.length > 0 && (
+          <button className="btn btn--ghost btn--big" type="button" onClick={() => setMapOpen(true)}>
+            지도 검색 선택
+          </button>
         )}
         {notice.totalHouseholdSourceUrl && (
           <a className="btn btn--ghost btn--big" href={notice.totalHouseholdSourceUrl} target="_blank" rel="noreferrer">
@@ -222,6 +235,24 @@ export function DetailScreen({ notices, subscriptions }: Props) {
           </a>
         )}
       </div>
+      {mapOpen && (
+        <div className="sheet-backdrop" role="presentation" onClick={() => setMapOpen(false)}>
+          <section className="map-sheet" role="dialog" aria-modal="true" aria-labelledby="map-sheet-title" onClick={(event) => event.stopPropagation()}>
+            <div className="map-sheet__head"><h2 id="map-sheet-title">위치 검색</h2><button type="button" onClick={() => setMapOpen(false)} aria-label="닫기">×</button></div>
+            <p>공식 좌표가 없을 때는 주소 후보를 골라 지도에서 확인하세요.</p>
+            {mapCandidates.map((candidate) => (
+              <div className="map-sheet__candidate" key={candidate}>
+                <strong>{candidate}</strong>
+                <span>
+                  <a href={naverMapSearchUrl(candidate)} target="_blank" rel="noreferrer">네이버 지도</a>
+                  <a href={kakaoMapSearchUrl(candidate)} target="_blank" rel="noreferrer">카카오맵</a>
+                  <button type="button" onClick={() => void navigator.clipboard?.writeText(candidate)}>주소 복사</button>
+                </span>
+              </div>
+            ))}
+          </section>
+        </div>
+      )}
       <p className="fineprint">
         청약 신청과 자격 확인은 청약홈 공식 사이트에서 직접 진행해야 합니다. 접수 가능 시간은 영업일
         09:00~17:30 기준이며, 공고별 별도 조건과 정정 여부는 모집공고 원문을 확인하세요.
@@ -269,6 +300,11 @@ export function DetailScreen({ notices, subscriptions }: Props) {
                   {model.supplyCount != null ? `일반 ${model.supplyCount}세대` : "일반공급 확인 필요"}
                   {model.specialSupplyCount != null ? ` · 특별 ${model.specialSupplyCount}세대` : ""}
                 </span>
+                {model.specialSupply && (
+                  <small className="model-row__special">
+                    {Object.entries(model.specialSupply).filter(([, count]) => count != null).map(([key, count]) => `${({ multiChild: "다자녀", newlywed: "신혼", firstLife: "생애최초", oldParent: "노부모", institution: "기관추천", other: "기타", transferInstitution: "이전기관", youth: "청년", newborn: "신생아" } as Record<string, string>)[key]} ${count}`).join(" · ") || "특별공급 세부 유형 확인 필요"}
+                  </small>
+                )}
                 <strong>{model.priceMax ? formatManwon(model.priceMax) : "금액 확인 필요"}</strong>
               </div>
             </div>

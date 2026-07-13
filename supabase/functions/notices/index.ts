@@ -6,11 +6,14 @@ const API_BASE = "https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1";
 const REMNDR_DETAIL_OPERATION = "getRemndrLttotPblancDetail";
 const REMNDR_MODEL_OPERATION = "getRemndrLttotPblancMdl";
 const APT_DETAIL_OPERATION = "getAPTLttotPblancDetail";
+const APT_MODEL_OPERATION = "getAPTLttotPblancMdl";
 const APPLY_HOME_URL = "https://www.applyhome.co.kr";
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const PER_PAGE = 500;
 /** 청약홈(odcloud) 업스트림 호출 타임아웃(ms). 초과 시 AbortController 로 요청을 중단한다. */
 const FETCH_TIMEOUT_MS = 8_000;
+const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const MODEL_RETRY_MS = 60 * 60 * 1000;
 // IP당 분당 허용 요청 수. 인스턴스 메모리 기반의 best-effort 제한이다 —
 // Edge Function 인스턴스가 여러 개 뜨거나 재시작되면 카운터가 공유·유지되지 않는다.
 // 플랫폼 차원(예: Supabase/게이트웨이 레벨)의 정식 rate limiting 설정은 사람 작업으로 남긴다.
@@ -24,11 +27,17 @@ type RawItem = Record<string, unknown>;
 type ApiPage = { data?: RawItem[]; totalCount?: number; currentCount?: number; error?: string };
 type SourceKind = "remndr" | "apt";
 type ApplicationEvent = {
-  kind: "announce" | "receipt" | "special" | "rank1" | "rank2" | "winner" | "contract";
+  id?: string;
+  noticeId?: string;
+  kind: "announce" | "receipt" | "special" | "rank1" | "rank2" | "no-priority" | "winner" | "contract";
   label: string;
   start: string;
   end?: string;
+  regionScope?: "local" | "gyeonggi" | "other" | "all" | "not-applicable";
+  confirmed?: boolean;
+  sourceField?: string;
 };
+type ModelCacheRow = { notice_key: string; models: RawItem[]; fetched_at: string; retry_after?: string | null };
 
 // 공개 분양자료를 대조한 총세대수다. core의 complexProfiles.ts와 같은 값을 유지한다.
 const COMPLEX_PROFILES = [
@@ -223,8 +232,8 @@ async function fetchAll(
   return [first, ...rest].flatMap((page) => page.data ?? []);
 }
 
-function resolveType(raw: RawItem): "무순위" | "잔여세대" | "취소후재공급" {
-  if (raw.HOUSE_SECD === "06") return "취소후재공급";
+function resolveType(raw: RawItem): "무순위" | "잔여세대" | "불법행위 재공급" {
+  if (raw.HOUSE_SECD === "06") return "불법행위 재공급";
   const name = `${raw.HOUSE_SECD_NM ?? ""}${raw.HOUSE_NM ?? ""}`;
   if (name.includes("잔여")) return "잔여세대";
   return "무순위";
@@ -241,6 +250,17 @@ function normalizeModels(items: RawItem[]) {
     supplyArea: text(raw.SUPLY_AR),
     supplyCount: nonNegativeNumber(raw.SUPLY_HSHLDCO),
     specialSupplyCount: nonNegativeNumber(raw.SPSPLY_HSHLDCO),
+    specialSupply: {
+      multiChild: nonNegativeNumber(raw.MNYCH_HSHLDCO),
+      newlywed: nonNegativeNumber(raw.NWWDS_HSHLDCO),
+      firstLife: nonNegativeNumber(raw.LFE_FRST_HSHLDCO),
+      oldParent: nonNegativeNumber(raw.OLD_PARNTS_SUPORT_HSHLDCO),
+      institution: nonNegativeNumber(raw.INSTT_RECOMEND_HSHLDCO),
+      other: nonNegativeNumber(raw.ETC_HSHLDCO),
+      transferInstitution: nonNegativeNumber(raw.TRANSR_INSTT_ENFSN_HSHLDCO),
+      youth: nonNegativeNumber(raw.YGMN_HSHLDCO),
+      newborn: nonNegativeNumber(raw.NWBB_HSHLDCO),
+    },
     priceMax: positiveNumber(raw.LTTOT_TOP_AMOUNT),
   }));
 }
@@ -252,6 +272,8 @@ function event(
   endValue?: unknown,
   startTime = "09:00",
   endTime = "17:30",
+  sourceField = "",
+  regionScope: ApplicationEvent["regionScope"] = "not-applicable",
 ): ApplicationEvent | null {
   const start = normalizeYmd(startValue);
   if (!start) return null;
@@ -261,24 +283,27 @@ function event(
     label,
     start: kstDateToUtcIso(start, startTime),
     end: kstDateToUtcIso(end, endTime),
+    sourceField,
+    regionScope,
+    confirmed: true,
   };
 }
 
 function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
   const candidates: Array<ApplicationEvent | null> = [
-    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59"),
+    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59", "RCRIT_PBLANC_DE"),
     kind === "remndr"
-      ? event("receipt", "청약 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE)
-      : event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE),
-    kind === "apt" ? event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE) : null,
-    kind === "apt" ? event("rank1", "1순위 해당지역", raw.GNRL_RNK1_CRSPAREA_RCPTDE, raw.GNRL_RNK1_CRSPAREA_ENDDE) : null,
-    kind === "apt" ? event("rank1", "1순위 경기지역", raw.GNRL_RNK1_ETC_GG_RCPTDE, raw.GNRL_RNK1_ETC_GG_ENDDE) : null,
-    kind === "apt" ? event("rank1", "1순위 기타지역", raw.GNRL_RNK1_ETC_AREA_RCPTDE, raw.GNRL_RNK1_ETC_AREA_ENDDE) : null,
-    kind === "apt" ? event("rank2", "2순위 해당지역", raw.GNRL_RNK2_CRSPAREA_RCPTDE, raw.GNRL_RNK2_CRSPAREA_ENDDE) : null,
-    kind === "apt" ? event("rank2", "2순위 경기지역", raw.GNRL_RNK2_ETC_GG_RCPTDE, raw.GNRL_RNK2_ETC_GG_ENDDE) : null,
-    kind === "apt" ? event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE) : null,
-    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59"),
-    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30"),
+      ? event("no-priority", "무순위·잔여 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE, "09:00", "17:30", "SUBSCRPT_RCEPT_BGNDE", "all")
+      : event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE, "09:00", "17:30", "RCEPT_BGNDE", "all"),
+    kind === "apt" ? event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE, "09:00", "17:30", "SPSPLY_RCEPT_BGNDE", "all") : null,
+    kind === "apt" ? event("rank1", "1순위 해당지역", raw.GNRL_RNK1_CRSPAREA_RCPTDE, raw.GNRL_RNK1_CRSPAREA_ENDDE, "09:00", "17:30", "GNRL_RNK1_CRSPAREA_RCPTDE", "local") : null,
+    kind === "apt" ? event("rank1", "1순위 경기지역", raw.GNRL_RNK1_ETC_GG_RCPTDE, raw.GNRL_RNK1_ETC_GG_ENDDE, "09:00", "17:30", "GNRL_RNK1_ETC_GG_RCPTDE", "gyeonggi") : null,
+    kind === "apt" ? event("rank1", "1순위 기타지역", raw.GNRL_RNK1_ETC_AREA_RCPTDE, raw.GNRL_RNK1_ETC_AREA_ENDDE, "09:00", "17:30", "GNRL_RNK1_ETC_AREA_RCPTDE", "other") : null,
+    kind === "apt" ? event("rank2", "2순위 해당지역", raw.GNRL_RNK2_CRSPAREA_RCPTDE, raw.GNRL_RNK2_CRSPAREA_ENDDE, "09:00", "17:30", "GNRL_RNK2_CRSPAREA_RCPTDE", "local") : null,
+    kind === "apt" ? event("rank2", "2순위 경기지역", raw.GNRL_RNK2_ETC_GG_RCPTDE, raw.GNRL_RNK2_ETC_GG_ENDDE, "09:00", "17:30", "GNRL_RNK2_ETC_GG_RCPTDE", "gyeonggi") : null,
+    kind === "apt" ? event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE, "09:00", "17:30", "GNRL_RNK2_ETC_AREA_RCPTDE", "other") : null,
+    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59", "PRZWNER_PRESNATN_DE"),
+    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30", "CNTRCT_CNCLS_BGNDE"),
   ];
   const seen = new Set<string>();
   return candidates
@@ -305,8 +330,9 @@ function recentAnnouncementCutoff(days = 120): string {
 
 function normalize(raw: RawItem, models: RawItem[], verifiedAt: string, kind: SourceKind) {
   const houseName = text(raw.HOUSE_NM);
-  const events = eventsFor(raw, kind);
-  const receiptEvents = events.filter((item) => ["receipt", "special", "rank1", "rank2"].includes(item.kind));
+  const draftEvents = eventsFor(raw, kind);
+  const events = draftEvents;
+  const receiptEvents = events.filter((item) => ["receipt", "special", "rank1", "rank2", "no-priority"].includes(item.kind));
   if (!houseName || receiptEvents.length === 0) return null;
 
   const startEvent = receiptEvents.reduce((min, item) => Date.parse(item.start) < Date.parse(min.start) ? item : min);
@@ -318,6 +344,11 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string, kind: So
     ?? startEvent.start.slice(0, 10);
 
   const identity = noticeIdentity(raw, houseName, startYmd);
+  const identifiedEvents = events.map((item, index) => ({
+    ...item,
+    id: `${identity.id}:${item.sourceField || `${item.kind}-${index}`}`,
+    noticeId: identity.id,
+  }));
   const profile = findComplexProfile(houseName, text(raw.HSSPLY_ADRES));
   const modelSummaries = normalizeModels(models);
   const prices = modelSummaries
@@ -359,9 +390,93 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string, kind: So
     noticeUrl: urlText(raw.PBLANC_URL),
     receiptNote: RECEIPT_NOTE,
     modelSummaries: modelSummaries.length > 0 ? modelSummaries : undefined,
-    events,
+    modelDataStatus: modelSummaries.length > 0 ? "collected" : "not-collected",
+    modelDataVerifiedAt: modelSummaries.length > 0 ? verifiedAt : undefined,
+    events: identifiedEvents,
     lastVerifiedAt: verifiedAt,
   };
+}
+
+function supabaseCredentials(): { url: string; serviceRole: string } | null {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  return url && serviceRole ? { url, serviceRole } : null;
+}
+
+async function readModelCache(): Promise<Map<string, ModelCacheRow>> {
+  const credentials = supabaseCredentials();
+  if (!credentials) return new Map();
+  const res = await fetch(`${credentials.url}/rest/v1/notice_model_cache?select=notice_key,models,fetched_at,retry_after&limit=1000`, {
+    headers: { apikey: credentials.serviceRole, authorization: `Bearer ${credentials.serviceRole}` },
+  });
+  if (!res.ok) throw new Error(`주택형 캐시 조회 실패 ${res.status}`);
+  const rows = await res.json() as ModelCacheRow[];
+  return new Map(rows.map((row) => [row.notice_key, row]));
+}
+
+async function writeModelCache(row: ModelCacheRow & { last_error?: string | null }): Promise<void> {
+  const credentials = supabaseCredentials();
+  if (!credentials) return;
+  const res = await fetch(`${credentials.url}/rest/v1/notice_model_cache?on_conflict=notice_key`, {
+    method: "POST",
+    headers: {
+      apikey: credentials.serviceRole,
+      authorization: `Bearer ${credentials.serviceRole}`,
+      "content-type": "application/json",
+      prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) throw new Error(`주택형 캐시 저장 실패 ${res.status}`);
+}
+
+function relevantAptDetails(items: RawItem[]): RawItem[] {
+  const now = Date.now();
+  const date = new Date();
+  const nextMonthEnd = Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 2, 1) - 1;
+  return items.filter((raw) => {
+    const events = eventsFor(raw, "apt");
+    if (events.length === 0) return false;
+    const start = Math.min(...events.map((item) => Date.parse(item.start)));
+    const end = Math.max(...events.map((item) => Date.parse(item.end ?? item.start)));
+    return end >= now && start <= nextMonthEnd;
+  });
+}
+
+async function refreshAptModelCache(serviceKey: string, items: RawItem[]): Promise<void> {
+  const queue = [...items];
+  const workers = Array.from({ length: Math.min(2, queue.length) }, async () => {
+    for (;;) {
+      const raw = queue.shift();
+      if (!raw) return;
+      const key = modelKey(raw);
+      const manageNo = text(raw.HOUSE_MANAGE_NO);
+      const pblancNo = text(raw.PBLANC_NO);
+      if (!manageNo || !pblancNo) continue;
+      try {
+        const models = await fetchAll(APT_MODEL_OPERATION, serviceKey, {
+          "cond[HOUSE_MANAGE_NO::EQ]": manageNo,
+          "cond[PBLANC_NO::EQ]": pblancNo,
+        });
+        await writeModelCache({ notice_key: key, models, fetched_at: new Date().toISOString(), retry_after: null, last_error: null });
+      } catch (error) {
+        await writeModelCache({
+          notice_key: key,
+          models: [],
+          fetched_at: new Date(0).toISOString(),
+          retry_after: new Date(Date.now() + MODEL_RETRY_MS).toISOString(),
+          last_error: error instanceof Error ? error.message.slice(0, 500) : "unknown",
+        }).catch(() => {});
+      }
+    }
+  });
+  await Promise.all(workers);
+}
+
+function runInBackground(task: Promise<void>): void {
+  const runtime = (globalThis as unknown as { EdgeRuntime?: { waitUntil?: (promise: Promise<void>) => void } }).EdgeRuntime;
+  if (runtime?.waitUntil) runtime.waitUntil(task);
+  else void task;
 }
 
 Deno.serve(async (req) => {
@@ -402,11 +517,18 @@ Deno.serve(async (req) => {
     const remndrModelsByNotice = groupModels(remndrModels);
 
     const verifiedAt = new Date().toISOString();
+    const aptCache = await readModelCache().catch(() => new Map<string, ModelCacheRow>());
+    const relevantApt = relevantAptDetails(aptDetails);
+    const refreshTargets = relevantApt.filter((raw) => {
+      const cached = aptCache.get(modelKey(raw));
+      if (!cached) return true;
+      if (cached.retry_after && Date.parse(cached.retry_after) > Date.now()) return false;
+      return Date.now() - Date.parse(cached.fetched_at) >= MODEL_CACHE_TTL_MS;
+    });
+    if (refreshTargets.length > 0) runInBackground(refreshAptModelCache(serviceKey, refreshTargets));
     const notices = [
       ...remndrDetails.map((raw) => normalize(raw, remndrModelsByNotice.get(modelKey(raw)) ?? [], verifiedAt, "remndr")),
-      // 일반공급 주택형 API를 공고별로 반복 호출하면 공공데이터포털 호출량 제한을 넘기므로,
-      // 첫 안정화 단계에서는 상세 공고의 공식 세대·일정만 제공하고 금액·면적은 원문 확인으로 둔다.
-      ...aptDetails.map((raw) => normalize(raw, [], verifiedAt, "apt")),
+      ...aptDetails.map((raw) => normalize(raw, aptCache.get(modelKey(raw))?.models ?? [], verifiedAt, "apt")),
     ]
       .filter((notice) => notice !== null)
       .sort((a, b) => Date.parse(a.receiptStart) - Date.parse(b.receiptStart));

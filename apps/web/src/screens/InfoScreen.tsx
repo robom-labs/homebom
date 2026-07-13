@@ -5,6 +5,8 @@ import { AppHeader } from "../components/AppHeader";
 
 const APP_VERSION = packageInfo.version;
 const CONTACT = "hello.robom@gmail.com";
+const BUILD_SHA = import.meta.env.VITE_BUILD_SHA || "local";
+const PWA_CACHE = "zzc-v11";
 
 function mailto(purpose: string): string {
   const subject = `[청약봄] ${purpose} 문의 · v${APP_VERSION}`;
@@ -41,7 +43,7 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
       <section className="info-card" aria-labelledby="about-homebom">
         <h2 id="about-homebom">청약봄은</h2>
         <p>
-          무순위·잔여세대·취소후재공급 청약 접수 시작과 마감 시간을 챙기기 위한 알림 서비스입니다.
+          일반공급·특별공급·순위별 접수와 무순위·잔여세대·불법행위 재공급 일정을 함께 챙기는 알림 서비스입니다.
         </p>
         <p>
           청약 신청과 자격 확인은 언제나{" "}
@@ -105,6 +107,7 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
       <footer className="app-meta">
         <strong>개발자 · 로봄</strong>
         <span>청약봄 v{APP_VERSION}</span>
+        <span>빌드 {BUILD_SHA.slice(0, 7)} · PWA {PWA_CACHE}</span>
         <span>공고 데이터 · 한국부동산원 청약홈</span>
       </footer>
     </div>

@@ -1,7 +1,13 @@
 // 청약홈 무순위 공고의 도메인 타입 정의.
 
-/** 공고 유형. 청약홈 HOUSE_SECD 04=무순위, 06=취소후재공급. 잔여세대는 이름으로 판별한다. */
-export type NoticeType = "일반공급" | "무순위" | "잔여세대" | "취소후재공급";
+/** 공고 유형. `취소후재공급`은 기존 저장 스냅샷을 읽기 위한 호환 별칭이다. */
+export type NoticeType =
+  | "일반공급"
+  | "무순위"
+  | "잔여세대"
+  | "임의공급"
+  | "불법행위 재공급"
+  | "취소후재공급";
 
 /** 화면에 보여줄 공고 상태. 시각과 플래그에서 파생된다. */
 export type NoticeStatus = "예정" | "접수중" | "마감" | "정정" | "취소";
@@ -12,6 +18,17 @@ export type NoticeModelSummary = {
   supplyArea?: string;
   supplyCount?: number;
   specialSupplyCount?: number;
+  specialSupply?: {
+    multiChild?: number;
+    newlywed?: number;
+    firstLife?: number;
+    oldParent?: number;
+    institution?: number;
+    other?: number;
+    transferInstitution?: number;
+    youth?: number;
+    newborn?: number;
+  };
   priceMax?: number;
 };
 
@@ -21,17 +38,26 @@ export type ApplicationEventKind =
   | "special"
   | "rank1"
   | "rank2"
+  | "no-priority"
   | "winner"
   | "contract";
 
+export type ApplicationRegionScope = "local" | "gyeonggi" | "other" | "all" | "not-applicable";
+
 /** 공고별 모집공고·접수·발표·계약 일정을 한 달력에서 보여주기 위한 표준 일정. */
 export type ApplicationEvent = {
+  /** 새 데이터는 noticeId+sourceField 기반 안정 ID를 갖고, 과거 저장값은 adapter가 보강한다. */
+  id?: string;
+  noticeId?: string;
   kind: ApplicationEventKind;
   label: string;
+  regionScope?: ApplicationRegionScope;
   /** KST 날짜·시각을 변환한 UTC ISO. */
   start: string;
   /** 기간 일정일 때만 제공하는 UTC ISO. */
   end?: string;
+  confirmed?: boolean;
+  sourceField?: string;
 };
 
 export type Notice = {
@@ -92,6 +118,13 @@ export type Notice = {
   newspaperName?: string;
   receiptNote?: string;
   modelSummaries?: NoticeModelSummary[];
+  /** 주택형 보강 데이터의 수집 상태. `not-collected`는 공식값 0과 다르다. */
+  modelDataStatus?: "collected" | "not-collected" | "retrying";
+  modelDataVerifiedAt?: string;
+  latitude?: number;
+  longitude?: number;
+  geocodeQuery?: string;
+  geocodeStatus?: "matched" | "not-found" | "not-configured";
   /** 일반공급의 특별공급·1순위·2순위와 발표·계약까지 포함한 전체 일정. */
   events?: ApplicationEvent[];
   /** 데이터 확인 시각 (UTC ISO). */

@@ -31,7 +31,11 @@ export function useSubscriptions() {
     (notice: Notice) => {
       update({
         ...subs,
-        [notice.id]: { open: [...DEFAULT_OPEN_OFFSETS], close: [...DEFAULT_CLOSE_OFFSETS] },
+        [notice.id]: {
+          open: [...DEFAULT_OPEN_OFFSETS],
+          close: [...DEFAULT_CLOSE_OFFSETS],
+          eventIds: notice.events?.filter((item) => ["special", "rank1", "rank2", "no-priority", "winner", "contract"].includes(item.kind)).map((item) => item.id).filter((value): value is string => Boolean(value)) ?? [],
+        },
       });
       updateNoticeSnapshots({ ...noticeSnapshots, [notice.id]: notice });
     },
@@ -68,7 +72,7 @@ export function useSubscriptions() {
   );
 
   const toggleOffset = useCallback(
-    (id: string, kind: AlertKind, offset: number) => {
+    (id: string, kind: Exclude<AlertKind, "event">, offset: number) => {
       const entry = subs[id] ?? { open: [], close: [] };
       const list = entry[kind];
       const nextList = list.includes(offset)
@@ -84,5 +88,13 @@ export function useSubscriptions() {
     [subs, unsubscribe, update],
   );
 
-  return { subs, noticeSnapshots, isSubscribed, subscribe, unsubscribe, toggleOffset, syncNoticeSnapshots };
+  const toggleEvent = useCallback((id: string, eventId: string) => {
+    const entry = subs[id];
+    if (!entry) return;
+    const current = entry.eventIds ?? [];
+    const eventIds = current.includes(eventId) ? current.filter((value) => value !== eventId) : [...current, eventId];
+    update({ ...subs, [id]: { ...entry, eventIds } });
+  }, [subs, update]);
+
+  return { subs, noticeSnapshots, isSubscribed, subscribe, unsubscribe, toggleOffset, toggleEvent, syncNoticeSnapshots };
 }

@@ -1,11 +1,12 @@
 // 알림 구독과 발송 이력을 localStorage에 보관하는 저장소.
 import type { Notice } from "@zoopzoopcall/core";
 
-export type SubEntry = { open: number[]; close: number[] };
+export type SubEntry = { open: number[]; close: number[]; eventIds?: string[] };
 export type SubMap = Record<string, SubEntry>;
 export type NoticeSnapshotMap = Record<string, Notice>;
 
-const SUBS_KEY = "zzc:subs:v1";
+const SUBS_KEY = "zzc:subs:v2";
+const LEGACY_SUBS_KEY = "zzc:subs:v1";
 const FIRED_KEY = "zzc:fired:v1";
 const NOTICE_SNAPSHOTS_KEY = "zzc:notice-snapshots:v1";
 
@@ -28,11 +29,17 @@ function writeJson(key: string, value: unknown): boolean {
 }
 
 export function loadSubs(): SubMap {
-  return readJson<SubMap>(SUBS_KEY, {});
+  const current = readJson<SubMap>(SUBS_KEY, {});
+  if (Object.keys(current).length > 0) return current;
+  const legacy = readJson<SubMap>(LEGACY_SUBS_KEY, {});
+  if (Object.keys(legacy).length > 0) writeJson(SUBS_KEY, legacy);
+  return legacy;
 }
 
 export function saveSubs(subs: SubMap): void {
   writeJson(SUBS_KEY, subs);
+  // 이전 버전 앱이 같은 저장소를 읽어도 구독을 잃지 않도록 v1도 당분간 함께 유지한다.
+  writeJson(LEGACY_SUBS_KEY, subs);
 }
 
 export function loadNoticeSnapshots(): NoticeSnapshotMap {

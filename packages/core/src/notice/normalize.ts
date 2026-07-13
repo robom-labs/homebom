@@ -1,5 +1,11 @@
 // 청약홈 API(15098547) 원시 응답을 Notice로 정규화하는 순수함수.
-import type { ApplicationEvent, Notice, NoticeModelSummary, NoticeType } from "./types";
+import type {
+  ApplicationEvent,
+  ApplicationRegionScope,
+  Notice,
+  NoticeModelSummary,
+  NoticeType,
+} from "./types";
 import { findComplexProfile } from "./complexProfiles";
 
 /**
@@ -59,6 +65,15 @@ export type RawRemndrModelItem = {
   SUPLY_AR?: string | number;
   SUPLY_HSHLDCO?: string | number;
   SPSPLY_HSHLDCO?: string | number;
+  MNYCH_HSHLDCO?: string | number;
+  NWWDS_HSHLDCO?: string | number;
+  LFE_FRST_HSHLDCO?: string | number;
+  OLD_PARNTS_SUPORT_HSHLDCO?: string | number;
+  INSTT_RECOMEND_HSHLDCO?: string | number;
+  ETC_HSHLDCO?: string | number;
+  TRANSR_INSTT_ENFSN_HSHLDCO?: string | number;
+  YGMN_HSHLDCO?: string | number;
+  NWBB_HSHLDCO?: string | number;
   LTTOT_TOP_AMOUNT?: string | number;
   [key: string]: unknown;
 };
@@ -90,9 +105,9 @@ export function normalizeYmd(value: unknown): string | null {
   return Number.isNaN(Date.parse(`${ymd}T00:00:00+09:00`)) ? null : ymd;
 }
 
-/** HOUSE_SECD 코드로 공고 유형을 판정한다. 04=무순위(잔여세대 포함), 06=취소후재공급. */
+/** HOUSE_SECD 코드로 공고 유형을 판정한다. 06은 최신 사용자 명칭으로 정규화한다. */
 export function resolveNoticeType(raw: RawRemndrItem): NoticeType {
-  if (raw.HOUSE_SECD === "06") return "취소후재공급";
+  if (raw.HOUSE_SECD === "06") return "불법행위 재공급";
   const name = `${raw.HOUSE_SECD_NM ?? ""}${raw.HOUSE_NM ?? ""}`;
   if (name.includes("잔여")) return "잔여세대";
   return "무순위";
@@ -167,6 +182,17 @@ export function normalizeRemndrModels(items: RawRemndrModelItem[]): NoticeModelS
     supplyArea: optionalText(raw.SUPLY_AR),
     supplyCount: optionalNonNegativeNumber(raw.SUPLY_HSHLDCO),
     specialSupplyCount: optionalNonNegativeNumber(raw.SPSPLY_HSHLDCO),
+    specialSupply: {
+      multiChild: optionalNonNegativeNumber(raw.MNYCH_HSHLDCO),
+      newlywed: optionalNonNegativeNumber(raw.NWWDS_HSHLDCO),
+      firstLife: optionalNonNegativeNumber(raw.LFE_FRST_HSHLDCO),
+      oldParent: optionalNonNegativeNumber(raw.OLD_PARNTS_SUPORT_HSHLDCO),
+      institution: optionalNonNegativeNumber(raw.INSTT_RECOMEND_HSHLDCO),
+      other: optionalNonNegativeNumber(raw.ETC_HSHLDCO),
+      transferInstitution: optionalNonNegativeNumber(raw.TRANSR_INSTT_ENFSN_HSHLDCO),
+      youth: optionalNonNegativeNumber(raw.YGMN_HSHLDCO),
+      newborn: optionalNonNegativeNumber(raw.NWBB_HSHLDCO),
+    },
     priceMax: optionalPositiveNumber(raw.LTTOT_TOP_AMOUNT),
   }));
 }
@@ -178,6 +204,8 @@ function event(
   endValue?: unknown,
   startTime = DEFAULT_RECEIPT_START_KST,
   endTime = DEFAULT_RECEIPT_END_KST,
+  sourceField = "",
+  regionScope: ApplicationRegionScope = "not-applicable",
 ): ApplicationEvent | null {
   const start = normalizeYmd(startValue);
   if (!start) return null;
@@ -185,9 +213,21 @@ function event(
   return {
     kind,
     label,
+    regionScope,
     start: kstDateToUtcIso(start, startTime),
     end: kstDateToUtcIso(end, endTime),
+    confirmed: true,
+    sourceField,
   };
+}
+
+function identifyEvents(events: ApplicationEvent[], noticeId?: string): ApplicationEvent[] {
+  if (!noticeId) return events;
+  return events.map((item, index) => ({
+    ...item,
+    id: `${noticeId}:${item.sourceField || `${item.kind}-${index}`}`,
+    noticeId,
+  }));
 }
 
 function dedupeEvents(events: Array<ApplicationEvent | null>): ApplicationEvent[] {
@@ -203,29 +243,29 @@ function dedupeEvents(events: Array<ApplicationEvent | null>): ApplicationEvent[
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
-export function buildRemndrEvents(raw: RawRemndrItem): ApplicationEvent[] {
-  return dedupeEvents([
-    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59"),
-    event("receipt", "청약 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE),
-    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59"),
-    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30"),
-  ]);
+export function buildRemndrEvents(raw: RawRemndrItem, noticeId?: string): ApplicationEvent[] {
+  return identifyEvents(dedupeEvents([
+    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59", "RCRIT_PBLANC_DE"),
+    event("no-priority", "무순위·잔여 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE, "09:00", "17:30", "SUBSCRPT_RCEPT_BGNDE", "all"),
+    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59", "PRZWNER_PRESNATN_DE"),
+    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30", "CNTRCT_CNCLS_BGNDE"),
+  ]), noticeId);
 }
 
-export function buildAptEvents(raw: RawAptItem): ApplicationEvent[] {
-  return dedupeEvents([
-    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59"),
-    event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE),
-    event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE),
-    event("rank1", "1순위 해당지역", raw.GNRL_RNK1_CRSPAREA_RCPTDE, raw.GNRL_RNK1_CRSPAREA_ENDDE),
-    event("rank1", "1순위 경기지역", raw.GNRL_RNK1_ETC_GG_RCPTDE, raw.GNRL_RNK1_ETC_GG_ENDDE),
-    event("rank1", "1순위 기타지역", raw.GNRL_RNK1_ETC_AREA_RCPTDE, raw.GNRL_RNK1_ETC_AREA_ENDDE),
-    event("rank2", "2순위 해당지역", raw.GNRL_RNK2_CRSPAREA_RCPTDE, raw.GNRL_RNK2_CRSPAREA_ENDDE),
-    event("rank2", "2순위 경기지역", raw.GNRL_RNK2_ETC_GG_RCPTDE, raw.GNRL_RNK2_ETC_GG_ENDDE),
-    event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE),
-    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59"),
-    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30"),
-  ]);
+export function buildAptEvents(raw: RawAptItem, noticeId?: string): ApplicationEvent[] {
+  return identifyEvents(dedupeEvents([
+    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59", "RCRIT_PBLANC_DE"),
+    event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE, "09:00", "17:30", "RCEPT_BGNDE", "all"),
+    event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE, "09:00", "17:30", "SPSPLY_RCEPT_BGNDE", "all"),
+    event("rank1", "1순위 해당지역", raw.GNRL_RNK1_CRSPAREA_RCPTDE, raw.GNRL_RNK1_CRSPAREA_ENDDE, "09:00", "17:30", "GNRL_RNK1_CRSPAREA_RCPTDE", "local"),
+    event("rank1", "1순위 경기지역", raw.GNRL_RNK1_ETC_GG_RCPTDE, raw.GNRL_RNK1_ETC_GG_ENDDE, "09:00", "17:30", "GNRL_RNK1_ETC_GG_RCPTDE", "gyeonggi"),
+    event("rank1", "1순위 기타지역", raw.GNRL_RNK1_ETC_AREA_RCPTDE, raw.GNRL_RNK1_ETC_AREA_ENDDE, "09:00", "17:30", "GNRL_RNK1_ETC_AREA_RCPTDE", "other"),
+    event("rank2", "2순위 해당지역", raw.GNRL_RNK2_CRSPAREA_RCPTDE, raw.GNRL_RNK2_CRSPAREA_ENDDE, "09:00", "17:30", "GNRL_RNK2_CRSPAREA_RCPTDE", "local"),
+    event("rank2", "2순위 경기지역", raw.GNRL_RNK2_ETC_GG_RCPTDE, raw.GNRL_RNK2_ETC_GG_ENDDE, "09:00", "17:30", "GNRL_RNK2_ETC_GG_RCPTDE", "gyeonggi"),
+    event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE, "09:00", "17:30", "GNRL_RNK2_ETC_AREA_RCPTDE", "other"),
+    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59", "PRZWNER_PRESNATN_DE"),
+    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30", "CNTRCT_CNCLS_BGNDE"),
+  ]), noticeId);
 }
 
 /**
@@ -247,7 +287,7 @@ export function normalizeRemndrItem(
   const supply = optionalPositiveNumber(raw.TOT_SUPLY_HSHLDCO);
   const profile = findComplexProfile(houseName, raw.HSSPLY_ADRES?.trim());
   const modelSummaries = normalizeRemndrModels(modelItems);
-  const events = buildRemndrEvents(raw);
+  const events = buildRemndrEvents(raw, identity.id);
   const prices = modelSummaries
     .map((m) => m.priceMax)
     .filter((price): price is number => typeof price === "number");
@@ -287,6 +327,8 @@ export function normalizeRemndrItem(
     noticeUrl: normalizeExternalUrl(raw.PBLANC_URL),
     receiptNote: RECEIPT_NOTE,
     modelSummaries: modelSummaries.length > 0 ? modelSummaries : undefined,
+    modelDataStatus: modelSummaries.length > 0 ? "collected" : "not-collected",
+    modelDataVerifiedAt: modelSummaries.length > 0 ? verifiedAt : undefined,
     events,
     lastVerifiedAt: verifiedAt,
   };
@@ -299,14 +341,15 @@ export function normalizeAptItem(
   modelItems: RawRemndrModelItem[] = [],
 ): Notice | null {
   const houseName = raw.HOUSE_NM?.trim();
-  const events = buildAptEvents(raw);
-  const receiptEvents = events.filter((item) => ["receipt", "special", "rank1", "rank2"].includes(item.kind));
+  const draftEvents = buildAptEvents(raw);
+  const receiptEvents = draftEvents.filter((item) => ["receipt", "special", "rank1", "rank2"].includes(item.kind));
   if (!houseName || receiptEvents.length === 0) return null;
 
   const start = receiptEvents.reduce((min, item) => Date.parse(item.start) < Date.parse(min.start) ? item : min);
   const end = receiptEvents.reduce((max, item) => Date.parse(item.end ?? item.start) > Date.parse(max.end ?? max.start) ? item : max);
   const startYmd = normalizeYmd(raw.RCEPT_BGNDE) ?? normalizeYmd(raw.SPSPLY_RCEPT_BGNDE) ?? start.start.slice(0, 10);
   const identity = buildNoticeIdentity(raw, houseName, startYmd);
+  const events = buildAptEvents(raw, identity.id);
   const modelSummaries = normalizeRemndrModels(modelItems);
   const prices = modelSummaries.map((item) => item.priceMax).filter((price): price is number => typeof price === "number");
 
@@ -342,6 +385,8 @@ export function normalizeAptItem(
     noticeUrl: normalizeExternalUrl(raw.PBLANC_URL),
     receiptNote: RECEIPT_NOTE,
     modelSummaries: modelSummaries.length > 0 ? modelSummaries : undefined,
+    modelDataStatus: modelSummaries.length > 0 ? "collected" : "not-collected",
+    modelDataVerifiedAt: modelSummaries.length > 0 ? verifiedAt : undefined,
     events,
     lastVerifiedAt: verifiedAt,
   };

@@ -2,6 +2,7 @@
 export type {
   ApplicationEvent,
   ApplicationEventKind,
+  ApplicationRegionScope,
   Notice,
   NoticeType,
   NoticeStatus,
@@ -26,6 +27,7 @@ export {
 export type { RawAptItem, RawRemndrItem, RawRemndrModelItem } from "./notice/normalize";
 export { formatPriceRange } from "./notice/price";
 export { formatArea, pyeongFromSqm, SQM_PER_PYEONG } from "./notice/area";
+export { addressSearchCandidates, kakaoMapSearchUrl, naverMapSearchUrl } from "./notice/location";
 export {
   formatHouseholdSummary,
   formatHouseTypeLabel,
@@ -44,6 +46,7 @@ export {
 } from "./time/kst";
 export {
   buildNoticeAlerts,
+  buildEventAlerts,
   offsetLabel,
   DEFAULT_OPEN_OFFSETS,
   DEFAULT_CLOSE_OFFSETS,

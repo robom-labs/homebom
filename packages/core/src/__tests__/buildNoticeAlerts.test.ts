@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildNoticeAlerts,
+  buildEventAlerts,
   DEFAULT_CLOSE_OFFSETS,
   DEFAULT_OPEN_OFFSETS,
   offsetLabel,
@@ -27,6 +28,25 @@ describe("offsetLabel", () => {
     expect(offsetLabel(30)).toBe("30분");
     expect(offsetLabel(180)).toBe("3시간");
     expect(offsetLabel(1440)).toBe("1일");
+  });
+});
+
+describe("buildEventAlerts", () => {
+  it("선택한 세부 일정에 하루 전·한 시간 전 안정 ID 알림을 만든다", () => {
+    const events = [{
+      id: `${notice.id}:SPSPLY_RCEPT_BGNDE`,
+      noticeId: notice.id,
+      kind: "special" as const,
+      label: "특별공급",
+      start: "2026-07-10T00:00:00.000Z",
+      sourceField: "SPSPLY_RCEPT_BGNDE",
+    }];
+    const alerts = buildEventAlerts(notice, events, T("2026-07-01T00:00:00Z"));
+    expect(alerts.map((item) => item.id)).toEqual([
+      `${notice.id}:SPSPLY_RCEPT_BGNDE:event:1440`,
+      `${notice.id}:SPSPLY_RCEPT_BGNDE:event:60`,
+    ]);
+    expect(alerts.every((item) => item.kind === "event")).toBe(true);
   });
 });
 

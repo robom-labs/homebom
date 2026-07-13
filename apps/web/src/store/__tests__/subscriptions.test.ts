@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Notice } from "@zoopzoopcall/core";
-import { migrateLegacyNoticeKeys } from "../subscriptions";
+import { loadSubs, migrateLegacyNoticeKeys, saveSubs } from "../subscriptions";
+
+let store: Map<string, string>;
+beforeEach(() => {
+  store = new Map();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+  });
+});
 
 function notice(overrides: Partial<Notice> = {}): Notice {
   return {
@@ -40,5 +49,20 @@ describe("migrateLegacyNoticeKeys", () => {
     const result = migrateLegacyNoticeKeys([current], {}, {});
     expect(result.changed).toBe(false);
     expect(result.subs).toEqual({});
+  });
+});
+
+describe("구독 저장 버전 호환", () => {
+  it("v1 구독을 처음 읽을 때 v2로 복사한다", () => {
+    store.set("zzc:subs:v1", JSON.stringify({ old: { open: [60], close: [] } }));
+    expect(loadSubs()).toEqual({ old: { open: [60], close: [] } });
+    expect(store.get("zzc:subs:v2")).toBe(store.get("zzc:subs:v1"));
+  });
+
+  it("새 구독은 v1과 v2에 함께 저장한다", () => {
+    const value = { current: { open: [0], close: [60], eventIds: ["event-1"] } };
+    saveSubs(value);
+    expect(JSON.parse(store.get("zzc:subs:v1")!)).toEqual(value);
+    expect(JSON.parse(store.get("zzc:subs:v2")!)).toEqual(value);
   });
 });

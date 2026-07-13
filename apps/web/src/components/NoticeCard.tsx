@@ -23,6 +23,7 @@ type Props = {
   notice: Notice;
   now: number;
   subscribed: boolean;
+  compact?: boolean;
 };
 
 function receiptText(notice: Notice): string {
@@ -35,7 +36,7 @@ function receiptText(notice: Notice): string {
   return `${start} ~ ${end}`;
 }
 
-export function NoticeCard({ notice, now, subscribed }: Props) {
+export function NoticeCard({ notice, now, subscribed, compact = false }: Props) {
   const status = getNoticeStatus(notice, now);
   const closingSoon = isClosingSoon(notice, now);
   const finished = status === "마감" || status === "취소";
@@ -70,12 +71,28 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
   const nextEventText = nextEvent
     ? `${nextEvent.label} · ${formatKstDate(nextEvent.start)}${Date.parse(nextEvent.start) <= now && Date.parse(nextEvent.end ?? nextEvent.start) >= now ? " 진행 중" : ""}`
     : "전체 일정 종료";
+  const regularSupply = models.reduce((sum, item) => sum + (item.supplyCount ?? 0), 0);
+  const specialSupply = models.reduce((sum, item) => sum + (item.specialSupplyCount ?? 0), 0);
+  const areaValues = models
+    .map((item) => Number.parseFloat(String(item.supplyArea ?? "")))
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  const areaRange = areaValues.length > 0
+    ? `${formatArea(areaValues[0])}${areaValues.length > 1 && areaValues.at(-1) !== areaValues[0] ? ` ~ ${formatArea(areaValues.at(-1))}` : ""}`
+    : "공고문 확인";
+
+  if (compact) {
+    return (
+      <Link className="agenda-link" to={`/notice/${notice.id}`}>
+        <span>{notice.region} · {notice.supplyCount != null ? `${notice.supplyCount}세대` : "모집 세대 확인"}</span>
+        <strong>상세 보기 ›</strong>
+      </Link>
+    );
+  }
 
   return (
-    <Link
-      to={`/notice/${notice.id}`}
-      className={`card${closingSoon ? " card--urgent" : ""}${finished ? " card--finished" : ""}`}
-    >
+    <article className={`card${closingSoon ? " card--urgent" : ""}${finished ? " card--finished" : ""}`}>
+      <Link to={`/notice/${notice.id}`} className="card__detail-link">
       <div className="card__top">
         <div className="card__badges">
           <TypeBadge type={notice.type} />
@@ -84,14 +101,16 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
         </div>
         {stamp && <DdayStamp label={stamp.label} tone={stamp.tone} />}
       </div>
+      <p className="card__event">{nextEventText}</p>
       <h3 className="card__title">{notice.houseName}</h3>
       <p className="card__meta">{notice.region} · {housingCategory}</p>
       <dl className="card__info">
         <div className="card__info-row card__info-row--wide card__info-row--households"><dt className="card__label">세대</dt><dd className="card__value">{households}</dd></div>
         <div className="card__info-row card__info-row--wide"><dt className="card__label">분양가</dt><dd className={`card__value${price ? " card__value--price" : " card__value--muted"}`}>{price ?? "공고문 확인"}</dd></div>
-        <div className="card__info-row"><dt className="card__label">대표형·면적</dt><dd className="card__value">{houseSpec}</dd></div>
+        <div className="card__info-row"><dt className="card__label">공급 세대</dt><dd className="card__value">{models.length > 0 ? `일반 ${regularSupply} · 특별 ${specialSupply}` : households}</dd></div>
+        <div className="card__info-row"><dt className="card__label">면적</dt><dd className="card__value">{areaRange}</dd></div>
         <div className="card__info-row"><dt className="card__label">당첨 발표</dt><dd className="card__value">{notice.winnerDate ? formatKstDate(notice.winnerDate) : "공고문 확인"}</dd></div>
-        <div className="card__info-row"><dt className="card__label">다음 일정</dt><dd className="card__value card__value--next">{nextEventText}</dd></div>
+        <div className="card__info-row"><dt className="card__label">대표 주택형</dt><dd className="card__value card__value--next">{houseSpec}</dd></div>
         <div className="card__info-row card__info-row--wide"><dt className="card__label">접수 기간</dt><dd className="card__value">{receiptText(notice)}</dd></div>
       </dl>
       <div className="card__foot">
@@ -107,6 +126,11 @@ export function NoticeCard({ notice, now, subscribed }: Props) {
         )}
         {subscribed && !finished && <span className="card__bell">알림 켜짐</span>}
       </div>
-    </Link>
+      </Link>
+      <div className="card__actions">
+        <a href={notice.noticeUrl ?? notice.applyHomeUrl} target="_blank" rel="noreferrer">공식 접수처</a>
+        <Link to={`/notice/${notice.id}#alerts`}>{subscribed ? "알림 설정됨" : "알림 설정"}</Link>
+      </div>
+    </article>
   );
 }

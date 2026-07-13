@@ -27,6 +27,7 @@ git push -f https://github.com/robom-labs/homebom.git HEAD:gh-pages
 supabase login
 supabase link --project-ref <프로젝트ref>
 supabase secrets set DATA_GO_KR_SERVICE_KEY=<인증키>
+supabase db push --linked
 supabase functions deploy notices --no-verify-jwt
 ```
 
@@ -41,7 +42,8 @@ VITE_NOTICES_URL=https://<ref>.functions.supabase.co/notices
 주의:
 
 - 서비스키는 절대 `apps/web`(.env의 VITE_ 아닌 변수 포함)이나 커밋에 넣지 않는다. Supabase secrets에만 둔다.
-- 무료 서비스키는 일일 트래픽 제한(개발계정 4만)이 있어 함수에 10분 캐시를 뒀다.
+- 무료 서비스키는 일일 트래픽 제한(개발계정 4만)이 있어 함수 응답에는 10분 캐시를, 일반공급 주택형에는 24시간 서버 캐시와 재시도 시간을 둔다.
+- `notice_model_cache`는 RLS를 켜고 공개 정책을 만들지 않은 service-role 전용 테이블이다.
 - odcloud API가 `returnType=JSON`을 지원하므로 XML 파싱은 불필요(실측 확인).
 
 ## 검증 기록 (2026-07-08)

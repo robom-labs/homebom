@@ -1,5 +1,6 @@
 // 유형·접수상태·지역 필터 바. 화면 폭에 따라 유형 버튼을 균형 있게 정렬한다.
 import type { NoticeType } from "@zoopzoopcall/core";
+import type { EventFilter } from "./noticeSchedule";
 
 export type TypeFilter = NoticeType | "전체";
 export type StatusView = "접수중" | "접수예정" | "마감·취소";
@@ -13,16 +14,21 @@ type Props = {
   statusView: StatusView;
   onStatusView: (s: StatusView) => void;
   counts: Record<StatusView, number>;
+  eventFilter: EventFilter;
+  onEventFilter: (value: EventFilter) => void;
 };
 
-const TYPES: TypeFilter[] = ["전체", "일반공급", "무순위", "잔여세대", "취소후재공급"];
+const TYPES: TypeFilter[] = ["전체", "일반공급", "무순위", "잔여세대", "임의공급", "불법행위 재공급"];
 const TYPE_LABEL: Record<TypeFilter, string> = {
   전체: "전체",
   일반공급: "일반공급",
   무순위: "무순위",
   잔여세대: "잔여세대",
+  임의공급: "임의공급",
+  "불법행위 재공급": "불법행위 재공급",
   취소후재공급: "취소 재공급",
 };
+const EVENT_FILTERS: EventFilter[] = ["전체", "특별공급", "1순위", "2순위", "무순위·잔여", "재공급", "발표·계약"];
 const STATUS_VIEWS: StatusView[] = ["접수중", "접수예정", "마감·취소"];
 const STATUS_LABEL: Record<StatusView, string> = {
   접수중: "접수 중",
@@ -39,10 +45,19 @@ export function FilterBar({
   statusView,
   onStatusView,
   counts,
+  eventFilter,
+  onEventFilter,
 }: Props) {
   return (
     <div className="filters">
-      <div className="filters__row filters__row--top">
+      <div className="filters__event" role="tablist" aria-label="일정 종류">
+        {EVENT_FILTERS.map((value) => (
+          <button key={value} role="tab" aria-selected={eventFilter === value} className={`chip${eventFilter === value ? " chip--active" : ""}`} onClick={() => onEventFilter(value)}>{value}</button>
+        ))}
+      </div>
+      <details className="filters__more">
+        <summary>주택 유형·지역 더보기</summary>
+        <div className="filters__row filters__row--top">
         <div className="filters__chips" role="tablist" aria-label="공고 유형">
           {TYPES.map((t) => (
             <button
@@ -67,7 +82,8 @@ export function FilterBar({
             ))}
           </select>
         </label>
-      </div>
+        </div>
+      </details>
       <div className="segmented" role="tablist" aria-label="접수 상태">
         {STATUS_VIEWS.map((s) => (
           <button

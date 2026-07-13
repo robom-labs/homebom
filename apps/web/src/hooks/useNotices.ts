@@ -3,6 +3,29 @@ import { useCallback, useEffect, useState } from "react";
 import { enrichNoticeWithComplexProfile, type Notice } from "@zoopzoopcall/core";
 
 export type NoticeSource = "live" | "stale" | "not-connected";
+const LKG_KEY = "homebom:notices:lkg:v1";
+
+type LastKnownGood = { notices: Notice[]; verifiedAt: string | null; savedAt: string };
+
+export function loadLastKnownNotices(): LastKnownGood | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(LKG_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LastKnownGood;
+    return Array.isArray(parsed.notices) && typeof parsed.savedAt === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastKnownNotices(value: LastKnownGood): boolean {
+  try {
+    globalThis.localStorage?.setItem(LKG_KEY, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function noticeResponseMeta(headers: Headers): {
   source: Exclude<NoticeSource, "not-connected">;
@@ -29,9 +52,11 @@ export function useNotices() {
     setError(null);
     const liveUrl = import.meta.env.VITE_NOTICES_URL as string | undefined;
     if (!liveUrl) {
-      setNotices([]);
-      setSource("not-connected");
-      setError("실공고 연결이 아직 완료되지 않았습니다. 공고는 특정 시간에만 보이는 방식이 아닙니다.");
+      const cached = loadLastKnownNotices();
+      setNotices(cached?.notices.map(enrichNoticeWithComplexProfile) ?? []);
+      setSource(cached ? "stale" : "not-connected");
+      setVerifiedAt(cached?.verifiedAt ?? null);
+      setError(cached ? "공식 연결을 찾지 못해 이 기기에 저장된 마지막 확인본을 보여드려요." : "실공고 연결이 아직 완료되지 않았습니다. 공고는 특정 시간에만 보이는 방식이 아닙니다.");
       setLoading(false);
       return;
     }
@@ -44,15 +69,23 @@ export function useNotices() {
         throw new Error(Array.isArray(data) ? `HTTP ${res.status}` : data.error || `HTTP ${res.status}`);
       }
       const meta = noticeResponseMeta(res.headers);
-      setNotices(data.map(enrichNoticeWithComplexProfile));
+      const normalized = data.map(enrichNoticeWithComplexProfile);
+      setNotices(normalized);
       setSource(meta.source);
       setVerifiedAt(meta.verifiedAt);
+      if (meta.source === "live") {
+        saveLastKnownNotices({ notices: normalized, verifiedAt: meta.verifiedAt, savedAt: new Date().toISOString() });
+      }
     } catch (err) {
-      setNotices([]);
-      setSource("not-connected");
+      const cached = loadLastKnownNotices();
+      setNotices(cached?.notices.map(enrichNoticeWithComplexProfile) ?? []);
+      setSource(cached ? "stale" : "not-connected");
+      setVerifiedAt(cached?.verifiedAt ?? null);
       const timedOut = controller.signal.aborted;
       setError(
-        timedOut
+        cached
+          ? "공식 데이터 연결이 지연돼 이 기기에 저장된 마지막 확인본을 보여드려요. 신청 전 원문을 확인해 주세요."
+          : timedOut
           ? "실공고 응답이 10초 안에 오지 않아 요청을 중단했습니다. 잠시 후 다시 시도해 주세요."
           : err instanceof Error
             ? err.message
