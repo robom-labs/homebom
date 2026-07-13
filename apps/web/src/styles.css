@@ -426,3 +426,26 @@ a { color: inherit; }
   .settings-screen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; align-items: start; }
   .settings-screen > .appbar, .settings-screen > .app-meta { grid-column: 1 / -1; }
 }
+
+/* ── 로봄 패밀리 공통 설정 UI 킷 (야외봄 정본 규격, 청약봄 팔레트) ──
+   카드 라운드24 · 카드제목 뮤트 0.78rem · 행 68px(아이콘칩 40px 라운드14) · 앱 메타 카드 브랜드 soft */
+.settings-card { overflow: hidden; margin: 0 0 16px; padding: 0; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: var(--shadow); }
+.settings-card h3 { margin: 0; padding: 17px 18px 10px; color: var(--muted); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.04em; }
+.settings-note { margin: 0; padding: 0 18px 14px; color: var(--ink); font-size: 14.5px; line-height: 1.65; }
+.settings-note a { color: var(--accent-deep); font-weight: 700; }
+.settings-row { min-height: 68px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 10px 16px; color: var(--ink); text-decoration: none; border-top: 1px solid var(--line); }
+.settings-row-icon { width: 40px; height: 40px; display: grid; place-items: center; color: var(--accent-deep); background: var(--hero-strong); border-radius: 14px; }
+.settings-row strong, .settings-row small { display: block; }
+.settings-row strong { font-size: 0.94rem; }
+.settings-row small { margin-top: 2px; color: var(--muted); font-size: 0.8rem; }
+.settings-row em { color: var(--accent-deep); font-size: 0.72rem; font-style: normal; font-weight: 800; }
+.settings-row-go { color: var(--muted); display: grid; place-items: center; }
+.settings-deeplinks { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 18px 16px; }
+.primary-action { min-height: 46px; padding: 0 18px; border: 0; border-radius: 13px; background: var(--accent); color: #fff; font-size: 0.92rem; font-weight: 800; cursor: pointer; }
+.ghost-action { min-height: 46px; padding: 0 16px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-muted); color: var(--ink); font-size: 0.92rem; font-weight: 700; cursor: pointer; }
+.settings-guide { margin: 0 18px 16px; padding: 10px 12px; border-radius: 12px; background: var(--hero-strong); color: var(--ink); font-size: 13.5px; }
+.app-meta-card { min-height: 82px; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-bottom: 8px; padding: 16px; background: var(--hero-strong); border-radius: 24px; }
+.app-meta-icon { width: 48px; height: 48px; display: grid; place-items: center; color: var(--accent-deep); background: var(--surface); border-radius: 16px; }
+.app-meta-card strong { display: block; font-size: 1rem; }
+.app-meta-card small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.78rem; }
+.app-version { color: var(--accent-deep); font-weight: 800; font-size: 0.9rem; }
