@@ -1,6 +1,12 @@
 // 공고 데이터를 실공고 프록시(VITE_NOTICES_URL)에서만 로드하는 훅.
 import { useCallback, useEffect, useState } from "react";
-import { enrichNoticeWithComplexProfile, type Notice } from "@zoopzoopcall/core";
+import { enrichNoticeWithComplexProfile, sanitizeNoticeUrls, type Notice } from "@zoopzoopcall/core";
+
+// 서버가 고쳐지기 전 저장된 캐시나 구버전 응답의 깨진 외부 링크(`&amp;`)까지
+// 렌더 전에 복구한다.
+function prepareNotice(notice: Notice): Notice {
+  return sanitizeNoticeUrls(enrichNoticeWithComplexProfile(notice));
+}
 
 export type NoticeSource = "live" | "stale" | "not-connected";
 const LKG_KEY = "homebom:notices:lkg:v1";
@@ -53,7 +59,7 @@ export function useNotices() {
     const liveUrl = import.meta.env.VITE_NOTICES_URL as string | undefined;
     if (!liveUrl) {
       const cached = loadLastKnownNotices();
-      setNotices(cached?.notices.map(enrichNoticeWithComplexProfile) ?? []);
+      setNotices(cached?.notices.map(prepareNotice) ?? []);
       setSource(cached ? "stale" : "not-connected");
       setVerifiedAt(cached?.verifiedAt ?? null);
       setError(cached ? "공식 연결을 찾지 못해 이 기기에 저장된 마지막 확인본을 보여드려요." : "실공고 연결이 아직 완료되지 않았습니다. 공고는 특정 시간에만 보이는 방식이 아닙니다.");
@@ -69,7 +75,7 @@ export function useNotices() {
         throw new Error(Array.isArray(data) ? `HTTP ${res.status}` : data.error || `HTTP ${res.status}`);
       }
       const meta = noticeResponseMeta(res.headers);
-      const normalized = data.map(enrichNoticeWithComplexProfile);
+      const normalized = data.map(prepareNotice);
       setNotices(normalized);
       setSource(meta.source);
       setVerifiedAt(meta.verifiedAt);
@@ -78,7 +84,7 @@ export function useNotices() {
       }
     } catch (err) {
       const cached = loadLastKnownNotices();
-      setNotices(cached?.notices.map(enrichNoticeWithComplexProfile) ?? []);
+      setNotices(cached?.notices.map(prepareNotice) ?? []);
       setSource(cached ? "stale" : "not-connected");
       setVerifiedAt(cached?.verifiedAt ?? null);
       const timedOut = controller.signal.aborted;

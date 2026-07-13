@@ -33,6 +33,7 @@ export {
   formatHouseTypeLabel,
   inferHousingCategory,
 } from "./notice/housing";
+export { normalizeExternalUrl, sanitizeNoticeUrls } from "./notice/normalize";
 export { enrichNoticeWithComplexProfile, findComplexProfile } from "./notice/complexProfiles";
 export type { ComplexProfile } from "./notice/complexProfiles";
 export {

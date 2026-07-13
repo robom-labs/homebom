@@ -9,6 +9,7 @@ import {
   normalizeRemndrItems,
   normalizeYmd,
   resolveNoticeType,
+  sanitizeNoticeUrls,
 } from "../notice/normalize";
 
 const VERIFIED = "2026-07-08T00:00:00.000Z";
@@ -195,6 +196,42 @@ describe("normalizeExternalUrl", () => {
     for (const value of ["javascript:alert(1)", "data:text/html,x", "/relative", "https://exa\u0000mple.com"]) {
       expect(normalizeExternalUrl(value)).toBeUndefined();
     }
+  });
+});
+
+describe("청약홈 &amp; URL 복구", () => {
+  it("PBLANC_URL의 &amp; XML 이스케이프를 되돌려 공고 파라미터를 살린다", () => {
+    // API가 &를 &amp;로 이스케이프하면 pblancNo가 amp;pblancNo가 되어 청약홈이 404를 낸다.
+    const escaped =
+      "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancDetail.do?houseManageNo=2025000449&amp;pblancNo=2025000449";
+    const fixed = normalizeExternalUrl(escaped);
+    expect(fixed).toBe(
+      "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancDetail.do?houseManageNo=2025000449&pblancNo=2025000449",
+    );
+    expect(new URL(fixed!).searchParams.get("pblancNo")).toBe("2025000449");
+    // 숫자 엔티티(&#38;)와 정상 URL은 각각 복구·무변경(idempotent)이다.
+    expect(normalizeExternalUrl("https://a.co/x?a=1&#38;b=2")).toBe("https://a.co/x?a=1&b=2");
+    expect(normalizeExternalUrl("https://a.co/x?a=1&b=2")).toBe("https://a.co/x?a=1&b=2");
+  });
+});
+
+describe("sanitizeNoticeUrls", () => {
+  it("깨진 noticeUrl·officialHomepageUrl을 복구하고 정상 값은 그대로 둔다", () => {
+    const broken = {
+      noticeUrl: "https://www.applyhome.co.kr/d.do?houseManageNo=1&amp;pblancNo=1",
+      officialHomepageUrl: "https://model.example.com",
+      totalHouseholdSourceUrl: undefined,
+    };
+    const fixed = sanitizeNoticeUrls(broken);
+    expect(fixed.noticeUrl).toBe("https://www.applyhome.co.kr/d.do?houseManageNo=1&pblancNo=1");
+    // 정상 URL은 유효하게 보존된다(호스트만 있는 주소는 표준 후행 슬래시가 붙는다).
+    expect(fixed.officialHomepageUrl).toBe("https://model.example.com/");
+    expect(fixed.totalHouseholdSourceUrl).toBeUndefined();
+  });
+
+  it("고칠 게 없으면 같은 객체 참조를 반환한다", () => {
+    const clean = { noticeUrl: "https://a.co/x?a=1&b=2", officialHomepageUrl: undefined, totalHouseholdSourceUrl: undefined };
+    expect(sanitizeNoticeUrls(clean)).toBe(clean);
   });
 });
 

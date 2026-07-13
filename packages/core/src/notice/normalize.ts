@@ -126,11 +126,27 @@ function optionalText(value: unknown): string | undefined {
   return text || undefined;
 }
 
+// 청약홈 공공데이터 API는 PBLANC_URL의 `&`를 `&amp;`로 XML 이스케이프해 반환한다.
+// 이 상태로 링크를 열면 `?houseManageNo=…&amp;pblancNo=…`가 되어 청약홈이 공고를
+// 특정하지 못하고 404를 낸다. URL 파싱 전에 HTML 엔티티를 되돌린다.
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&amp;/gi, "&")
+    .replace(/&#0*38;/g, "&")
+    .replace(/&#x0*26;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&apos;/gi, "'");
+}
+
 export function normalizeExternalUrl(value: unknown): string | undefined {
   const text = optionalText(value);
   if (!text) return undefined;
   if (/[\u0000-\u001F\u007F]/.test(text)) return undefined;
-  const candidate = /^www\./i.test(text) ? `https://${text}` : text;
+  const decoded = decodeHtmlEntities(text);
+  const candidate = /^www\./i.test(decoded) ? `https://${decoded}` : decoded;
   try {
     const url = new URL(candidate);
     if (!url.hostname || (url.protocol !== "https:" && url.protocol !== "http:")) return undefined;
@@ -138,6 +154,27 @@ export function normalizeExternalUrl(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+// 렌더 직전 방어 — 서버가 고쳐지기 전에 저장된 LKG 캐시나 구버전 응답의
+// 깨진 외부 링크(`&amp;` 등)를 복구한다. 정상 URL·undefined는 그대로 둔다.
+export function sanitizeNoticeUrls<T extends {
+  noticeUrl?: string;
+  officialHomepageUrl?: string;
+  totalHouseholdSourceUrl?: string;
+}>(notice: T): T {
+  const fix = (value: string | undefined) => (value ? normalizeExternalUrl(value) ?? value : value);
+  const noticeUrl = fix(notice.noticeUrl);
+  const officialHomepageUrl = fix(notice.officialHomepageUrl);
+  const totalHouseholdSourceUrl = fix(notice.totalHouseholdSourceUrl);
+  if (
+    noticeUrl === notice.noticeUrl &&
+    officialHomepageUrl === notice.officialHomepageUrl &&
+    totalHouseholdSourceUrl === notice.totalHouseholdSourceUrl
+  ) {
+    return notice;
+  }
+  return { ...notice, noticeUrl, officialHomepageUrl, totalHouseholdSourceUrl };
 }
 
 function stableIdPart(value: string): string {

@@ -160,11 +160,27 @@ function findComplexProfile(houseName: string, address?: string) {
   );
 }
 
+// 청약홈 공공데이터 API는 PBLANC_URL의 `&`를 `&amp;`로 XML 이스케이프해 반환한다.
+// 이 상태로 링크를 열면 `?houseManageNo=…&amp;pblancNo=…`가 되어 청약홈이 공고를
+// 특정하지 못하고 404를 낸다. URL 파싱 전에 HTML 엔티티를 되돌린다.
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&amp;/gi, "&")
+    .replace(/&#0*38;/g, "&")
+    .replace(/&#x0*26;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&apos;/gi, "'");
+}
+
 function urlText(value: unknown): string | undefined {
   const out = text(value);
   if (!out) return undefined;
   if (/[\u0000-\u001F\u007F]/.test(out)) return undefined;
-  const candidate = /^www\./i.test(out) ? `https://${out}` : out;
+  const decoded = decodeHtmlEntities(out);
+  const candidate = /^www\./i.test(decoded) ? `https://${decoded}` : decoded;
   try {
     const url = new URL(candidate);
     if (!url.hostname || (url.protocol !== "https:" && url.protocol !== "http:")) return undefined;
