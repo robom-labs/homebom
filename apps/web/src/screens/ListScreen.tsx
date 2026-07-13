@@ -1,13 +1,13 @@
 // 공고 목록 화면. 유형·지역 필터 + 접수중/예정/마감·취소 상태를 골라 본다.
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Notice } from "@zoopzoopcall/core";
-import { getNoticeStatus } from "@zoopzoopcall/core";
+import type { ApplicationEvent, Notice } from "@zoopzoopcall/core";
+import { formatKstDateTime, getNoticeStatus, kstMonthWindowEnd } from "@zoopzoopcall/core";
 import { AppHeader } from "../components/AppHeader";
 import { FilterBar, type StatusView, type TypeFilter } from "../components/FilterBar";
 import { NoticeCard } from "../components/NoticeCard";
 import { NoticeCalendar } from "../components/NoticeCalendar";
 import { PermissionBanner } from "../components/PermissionBanner";
-import { eventsOnDate, noticeMatchesEventFilter, type EventFilter } from "../components/noticeSchedule";
+import { compareScheduleEvents, eventsOnDate, noticeMatchesEventFilter, type EventFilter } from "../components/noticeSchedule";
 import { noticeSchedule } from "../components/noticeSchedule";
 import { useNow } from "../hooks/useNow";
 import type { NoticeSource } from "../hooks/useNotices";
@@ -41,8 +41,7 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
   const agendaRef = useRef<HTMLHeadingElement>(null);
 
   const visibleNotices = useMemo(() => {
-    const current = new Date(now);
-    const nextMonthEnd = Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + 2, 1) - 1;
+    const nextMonthEnd = kstMonthWindowEnd(now);
     return notices.filter((notice) => {
       if (getNoticeStatus(notice, now) === "접수중") return true;
       return noticeSchedule(notice).some((event) => Date.parse(event.start) <= nextMonthEnd && Date.parse(event.end ?? event.start) >= now);
@@ -105,12 +104,11 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
 
   const active = groups[statusView];
 
-  // 캘린더에서 고른 날짜의 접수·발표·계약 공고(마감 임박 순).
-  const dayNotices = useMemo(() => {
+  // 선택한 날짜의 일정을 공고가 아니라 event 한 행 단위로 만든다.
+  const dayAgenda = useMemo(() => {
     if (!selectedDay) return [];
-    return filtered
-      .filter((n) => eventsOnDate(n, selectedDay).length > 0)
-      .sort((a, b) => Date.parse(a.receiptEnd) - Date.parse(b.receiptEnd));
+    return filtered.flatMap((notice) => eventsOnDate(notice, selectedDay).map((event) => ({ notice, event })))
+      .sort((a, b) => compareScheduleEvents(a.event, b.event, a.notice, b.notice));
   }, [filtered, selectedDay]);
 
   useEffect(() => {
@@ -152,14 +150,19 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
       {!loading && filtered.length > 0 && selectedDay && (
         <section className="day-agenda" aria-labelledby="selected-agenda-title" aria-live="polite">
           <div className="section-heading">
-            <h2 id="selected-agenda-title" ref={agendaRef} tabIndex={-1}>{dayLabel} 일정</h2>
-            <button type="button" className="day-clear" onClick={() => setSelectedDay(null)}>선택 해제</button>
+            <h2 id="selected-agenda-title" ref={agendaRef} tabIndex={-1}>{dayLabel} 일정 <span>{dayAgenda.length}</span></h2>
+            <button type="button" className="day-clear" onClick={() => setSelectedDay(null)}>전체 일정으로</button>
           </div>
-          {dayNotices.length > 0 ? dayNotices.map((notice) => (
-            <div className="day-agenda__item" key={notice.id}>
-              <span>{eventsOnDate(notice, selectedDay).map((item) => item.label).join(" · ")}</span>
+          {dayAgenda.length > 0 ? dayAgenda.map(({ notice, event }: { notice: Notice; event: ApplicationEvent }) => (
+            <div className="day-agenda__item" key={`${notice.id}-${event.id ?? `${event.kind}-${event.start}`}`}>
+              <span>{event.label}</span>
               <strong>{notice.houseName}</strong>
-              <NoticeCard notice={notice} now={now} subscribed={notice.id in subs} compact />
+              <small>{notice.region} · {notice.supplyCount != null ? `${notice.supplyCount.toLocaleString("ko-KR")}세대` : "모집 세대 공고문 확인"}</small>
+              <time dateTime={event.start}>{formatKstDateTime(event.start)}{event.end && event.end !== event.start ? ` ~ ${formatKstDateTime(event.end)}` : ""}</time>
+              <div className="day-agenda__actions">
+                <a href={`/homebom/notice/${encodeURIComponent(notice.id)}`}>상세</a>
+                <a href={`/homebom/notice/${encodeURIComponent(notice.id)}#alerts`}>{notice.id in subs ? "알림 설정됨" : "이 일정 알림"}</a>
+              </div>
             </div>
           )) : <p className="section-empty">선택한 날의 일정이 없어요.</p>}
         </section>

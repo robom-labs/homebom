@@ -97,6 +97,13 @@ describe("normalizeYmd", () => {
     expect(normalizeYmd("2026/07/10")).toBeNull();
     expect(normalizeYmd("미정")).toBeNull();
   });
+
+  it("달력에 존재하지 않는 날짜를 거부한다", () => {
+    expect(normalizeYmd("2026-02-29")).toBeNull();
+    expect(normalizeYmd("2026-02-30")).toBeNull();
+    expect(normalizeYmd("2024-02-29")).toBe("2024-02-29");
+    expect(normalizeYmd("2026-13-01")).toBeNull();
+  });
 });
 
 describe("resolveNoticeType", () => {

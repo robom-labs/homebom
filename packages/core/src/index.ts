@@ -38,6 +38,7 @@ export type { ComplexProfile } from "./notice/complexProfiles";
 export {
   KST_TZ,
   kstDateKey,
+  kstMonthWindowEnd,
   ddayKst,
   formatKstDateTime,
   formatKstDate,

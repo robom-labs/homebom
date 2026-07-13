@@ -20,7 +20,10 @@ export function AppHeader({ title = "청약봄", source, action, compact = false
       <div className="appbar__copy">
         <h1 className="appbar__title">
           {title === "청약봄" ? (
-            <span className="appbar__wordmark">청약봄</span>
+            <span className="appbar__wordmark" aria-label="청약봄">
+              <span className="appbar__prefix" aria-hidden="true">청약</span>
+              <img className="appbar__bom" src={`${import.meta.env.BASE_URL}brand/bom-homebom.svg`} alt="" aria-hidden="true" />
+            </span>
           ) : (
             title
           )}

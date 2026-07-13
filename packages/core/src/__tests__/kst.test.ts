@@ -1,6 +1,6 @@
 // KST 표기·D-day·남은 시간 계산 테스트.
 import { describe, expect, it } from "vitest";
-import { ddayKst, formatKstDateTime, formatManwon, formatRemaining, kstDateKey } from "../time/kst";
+import { ddayKst, formatKstDateTime, formatManwon, formatRemaining, kstDateKey, kstMonthWindowEnd } from "../time/kst";
 
 const T = (iso: string) => Date.parse(iso);
 
@@ -11,6 +11,19 @@ describe("kstDateKey", () => {
 
   it("UTC 15:00은 KST 다음 날 00:00", () => {
     expect(kstDateKey(T("2026-07-01T15:00:00Z"))).toBe("2026-07-02");
+  });
+});
+
+describe("kstMonthWindowEnd", () => {
+  it("KST 7월 말과 8월 초에서 다음 달 말이 같다", () => {
+    const expected = T("2026-08-31T14:59:59.999Z");
+    expect(kstMonthWindowEnd(T("2026-07-31T14:59:00.000Z"))).toBe(expected);
+    expect(kstMonthWindowEnd(T("2026-07-31T15:01:00.000Z"))).toBe(T("2026-09-30T14:59:59.999Z"));
+  });
+
+  it("연말과 윤년 2월 경계를 계산한다", () => {
+    expect(kstMonthWindowEnd(T("2026-12-15T00:00:00.000Z"))).toBe(T("2027-01-31T14:59:59.999Z"));
+    expect(kstMonthWindowEnd(T("2024-01-15T00:00:00.000Z"))).toBe(T("2024-02-29T14:59:59.999Z"));
   });
 });
 

@@ -14,10 +14,13 @@ import {
   inferHousingCategory,
   isClosingSoon,
   kstDateKey,
+  addressSearchCandidates,
+  naverMapSearchUrl,
 } from "@zoopzoopcall/core";
 import { DdayStamp } from "./DdayStamp";
 import { CorrectionBadge, StatusBadge, TypeBadge } from "./StatusBadge";
 import { nextNoticeEvent } from "./noticeSchedule";
+import { specialSupplySummary } from "./specialSupply";
 
 type Props = {
   notice: Notice;
@@ -80,6 +83,8 @@ export function NoticeCard({ notice, now, subscribed, compact = false }: Props) 
   const areaRange = areaValues.length > 0
     ? `${formatArea(areaValues[0])}${areaValues.length > 1 && areaValues.at(-1) !== areaValues[0] ? ` ~ ${formatArea(areaValues.at(-1))}` : ""}`
     : "공고문 확인";
+  const specialSummary = specialSupplySummary(models);
+  const mapQuery = addressSearchCandidates(notice.address, notice.houseName, notice.region)[0];
 
   if (compact) {
     return (
@@ -108,9 +113,10 @@ export function NoticeCard({ notice, now, subscribed, compact = false }: Props) 
         <div className="card__info-row card__info-row--wide card__info-row--households"><dt className="card__label">세대</dt><dd className="card__value">{households}</dd></div>
         <div className="card__info-row card__info-row--wide"><dt className="card__label">분양가</dt><dd className={`card__value${price ? " card__value--price" : " card__value--muted"}`}>{price ?? "공고문 확인"}</dd></div>
         <div className="card__info-row"><dt className="card__label">공급 세대</dt><dd className="card__value">{models.length > 0 ? `일반 ${regularSupply} · 특별 ${specialSupply}` : households}</dd></div>
-        <div className="card__info-row"><dt className="card__label">면적</dt><dd className="card__value">{areaRange}</dd></div>
+        <div className="card__info-row"><dt className="card__label">공급면적</dt><dd className="card__value">{areaRange}</dd></div>
         <div className="card__info-row"><dt className="card__label">당첨 발표</dt><dd className="card__value">{notice.winnerDate ? formatKstDate(notice.winnerDate) : "공고문 확인"}</dd></div>
         <div className="card__info-row"><dt className="card__label">대표 주택형</dt><dd className="card__value card__value--next">{houseSpec}</dd></div>
+        {specialSummary && <div className="card__info-row card__info-row--wide"><dt className="card__label">특별공급</dt><dd className="card__value">{specialSummary}</dd></div>}
         <div className="card__info-row card__info-row--wide"><dt className="card__label">접수 기간</dt><dd className="card__value">{receiptText(notice)}</dd></div>
       </dl>
       <div className="card__foot">
@@ -130,6 +136,7 @@ export function NoticeCard({ notice, now, subscribed, compact = false }: Props) 
       <div className="card__actions">
         <a href={notice.noticeUrl ?? notice.applyHomeUrl} target="_blank" rel="noreferrer">공식 접수처</a>
         <Link to={`/notice/${notice.id}#alerts`}>{subscribed ? "알림 설정됨" : "알림 설정"}</Link>
+        {mapQuery && <a href={naverMapSearchUrl(mapQuery)} target="_blank" rel="noreferrer">지도</a>}
       </div>
     </article>
   );

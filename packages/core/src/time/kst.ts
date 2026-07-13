@@ -33,6 +33,13 @@ export function kstDateKey(ms: number): string {
   return DATE_KEY_FORMATTER.format(new Date(ms));
 }
 
+/** 현재 KST 월부터 지정한 개월 뒤 월의 마지막 순간을 UTC ms로 반환한다. */
+export function kstMonthWindowEnd(now: number, monthsAhead = 1): number {
+  const [year, month] = kstDateKey(now).split("-").map(Number);
+  const nextWindowMonthStartUtc = Date.UTC(year, month + monthsAhead, 1) - 9 * 60 * 60 * 1000;
+  return nextWindowMonthStartUtc - 1;
+}
+
 /** KST 달력 기준 D-day. 오늘이면 0, 내일이면 1, 지났으면 음수. */
 export function ddayKst(targetIso: string, now: number): number {
   const target = Date.parse(targetIso);

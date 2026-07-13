@@ -1,6 +1,6 @@
 // 월(月) 캘린더 격자 계산 순수 로직과 KST 날짜 키. DOM 없이 단위 테스트한다.
 import type { ApplicationEventKind, Notice } from "@zoopzoopcall/core";
-import { noticeSchedule, scheduleDateKey } from "./noticeSchedule";
+import { eventPriority, noticeSchedule, scheduleDateKey, shortEventLabel } from "./noticeSchedule";
 
 // 캘린더 날짜 키(KST YYYY-MM-DD). 이 규칙은 ListScreen의 날짜 필터와 반드시 동일해야 한다.
 export function calendarDateKey(value: number | string): string {
@@ -25,7 +25,7 @@ export type MonthCell = {
   /** 계약 시작 수. */
   contracts: number;
   /** 좁은 모바일 셀에 표시할 일정 라벨. 최대 두 개와 나머지 건수만 렌더한다. */
-  markers: Array<{ kind: ApplicationEventKind; label: string }>;
+  markers: Array<{ kind: ApplicationEventKind; label: string; priority: number }>;
 };
 
 export type MonthGrid = {
@@ -67,7 +67,7 @@ export function buildMonthGrid(now: number, notices: Notice[], viewYear?: number
   const endCount = new Map<string, number>();
   const winnerCount = new Map<string, number>();
   const contractCount = new Map<string, number>();
-  const markers = new Map<string, Array<{ kind: ApplicationEventKind; label: string }>>();
+  const markers = new Map<string, Array<{ kind: ApplicationEventKind; label: string; priority: number }>>();
   const monthPrefix = `${year}-${pad(month)}`;
   const noticeIds = new Set<string>();
   for (const notice of notices) {
@@ -87,7 +87,8 @@ export function buildMonthGrid(now: number, notices: Notice[], viewYear?: number
       }
       const dayMarkers = markers.get(s) ?? [];
       if (!dayMarkers.some((marker) => marker.kind === item.kind && marker.label === item.label)) {
-        dayMarkers.push({ kind: item.kind, label: item.label.replace("전체 접수 기간", "접수").replace("당첨자 발표", "발표") });
+        dayMarkers.push({ kind: item.kind, label: shortEventLabel(item, notice), priority: eventPriority(item, notice) });
+        dayMarkers.sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label, "ko"));
         markers.set(s, dayMarkers);
       }
     }

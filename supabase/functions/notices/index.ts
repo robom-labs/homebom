@@ -14,6 +14,7 @@ const PER_PAGE = 500;
 const FETCH_TIMEOUT_MS = 8_000;
 const MODEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MODEL_RETRY_MS = 60 * 60 * 1000;
+const LOCATION_RETRY_MS = 24 * 60 * 60 * 1000;
 // IP당 분당 허용 요청 수. 인스턴스 메모리 기반의 best-effort 제한이다 —
 // Edge Function 인스턴스가 여러 개 뜨거나 재시작되면 카운터가 공유·유지되지 않는다.
 // 플랫폼 차원(예: Supabase/게이트웨이 레벨)의 정식 rate limiting 설정은 사람 작업으로 남긴다.
@@ -38,6 +39,19 @@ type ApplicationEvent = {
   sourceField?: string;
 };
 type ModelCacheRow = { notice_key: string; models: RawItem[]; fetched_at: string; retry_after?: string | null };
+type LocationCacheRow = {
+  notice_key: string;
+  raw_address: string;
+  normalized_address?: string | null;
+  query_used?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  status: "matched" | "not-found" | "not-configured";
+  provider?: string | null;
+  fetched_at: string;
+  retry_after?: string | null;
+  last_error?: string | null;
+};
 
 // 공개 분양자료를 대조한 총세대수다. core의 complexProfiles.ts와 같은 값을 유지한다.
 const COMPLEX_PROFILES = [
@@ -103,8 +117,12 @@ function normalizeYmd(value: unknown): string | null {
   const raw = String(value ?? "").trim();
   const match = raw.match(/^(\d{4})-?(\d{2})-?(\d{2})$/);
   if (!match) return null;
-  const ymd = `${match[1]}-${match[2]}-${match[3]}`;
-  return Number.isNaN(Date.parse(`${ymd}T00:00:00+09:00`)) ? null : ymd;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (utc.getUTCFullYear() !== year || utc.getUTCMonth() !== month - 1 || utc.getUTCDate() !== day) return null;
+  return `${match[1]}-${match[2]}-${match[3]}`;
 }
 
 function text(value: unknown): string | undefined {
@@ -114,6 +132,23 @@ function text(value: unknown): string | undefined {
 
 function normalizeHouseName(value: string): string {
   return value.replace(/\([^)]*\)/g, "").replace(/\s+/g, "").trim();
+}
+
+function locationQueries(raw: RawItem): string[] {
+  const address = text(raw.HSSPLY_ADRES) ?? "";
+  const withoutParentheses = address.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+  const parenthesized = [...address.matchAll(/\(([^)]*)\)/g)].map((match) => match[1].trim());
+  const withoutExtra = withoutParentheses.replace(/\s+(일원|부근).*$/u, "").trim();
+  const named = [text(raw.HOUSE_NM), text(raw.SUBSCRPT_AREA_CODE_NM)].filter(Boolean).join(" ");
+  return [...new Set([address, ...parenthesized, withoutParentheses, withoutExtra, named].map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean))];
+}
+
+function sameRegion(expected?: string, actual?: string): boolean {
+  if (!expected || !actual) return true;
+  const compact = (value: string) => value.replace(/[\s특별자치광역시도]/g, "");
+  const a = compact(expected);
+  const b = compact(actual);
+  return a.startsWith(b.slice(0, 2)) || b.startsWith(a.slice(0, 2));
 }
 
 function findComplexProfile(houseName: string, address?: string) {
@@ -289,8 +324,20 @@ function event(
   };
 }
 
+function eventPriority(item: ApplicationEvent): number {
+  const region = { local: 0, gyeonggi: 1, other: 2, all: 3, "not-applicable": 4 }[item.regionScope ?? "not-applicable"];
+  if (item.kind === "special") return 10;
+  if (item.kind === "rank1") return 20 + region;
+  if (item.kind === "rank2") return 30 + region;
+  if (item.kind === "no-priority") return 40;
+  if (item.kind === "receipt") return 50;
+  if (item.kind === "winner") return 60;
+  if (item.kind === "contract") return 70;
+  return 80;
+}
+
 function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
-  const candidates: Array<ApplicationEvent | null> = [
+  let candidates: Array<ApplicationEvent | null> = [
     event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59", "RCRIT_PBLANC_DE"),
     kind === "remndr"
       ? event("no-priority", "무순위·잔여 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE, "09:00", "17:30", "SUBSCRPT_RCEPT_BGNDE", "all")
@@ -305,6 +352,8 @@ function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
     event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59", "PRZWNER_PRESNATN_DE"),
     event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30", "CNTRCT_CNCLS_BGNDE"),
   ];
+  const hasDetailedReceipt = candidates.some((item) => item && ["special", "rank1", "rank2"].includes(item.kind));
+  if (hasDetailedReceipt) candidates = candidates.filter((item) => item?.kind !== "receipt");
   const seen = new Set<string>();
   return candidates
     .filter((item): item is ApplicationEvent => item !== null)
@@ -314,7 +363,7 @@ function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
       seen.add(key);
       return true;
     })
-    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start) || eventPriority(a) - eventPriority(b));
 }
 
 function recentAnnouncementCutoff(days = 120): string {
@@ -328,7 +377,23 @@ function recentAnnouncementCutoff(days = 120): string {
   }).format(date);
 }
 
-function normalize(raw: RawItem, models: RawItem[], verifiedAt: string, kind: SourceKind) {
+function kstDateKey(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function normalize(
+  raw: RawItem,
+  models: RawItem[],
+  verifiedAt: string,
+  kind: SourceKind,
+  modelStatusOverride?: "not-collected" | "retrying",
+  location?: LocationCacheRow,
+) {
   const houseName = text(raw.HOUSE_NM);
   const draftEvents = eventsFor(raw, kind);
   const events = draftEvents;
@@ -390,8 +455,12 @@ function normalize(raw: RawItem, models: RawItem[], verifiedAt: string, kind: So
     noticeUrl: urlText(raw.PBLANC_URL),
     receiptNote: RECEIPT_NOTE,
     modelSummaries: modelSummaries.length > 0 ? modelSummaries : undefined,
-    modelDataStatus: modelSummaries.length > 0 ? "collected" : "not-collected",
+    modelDataStatus: modelSummaries.length > 0 ? "collected" : modelStatusOverride ?? "not-collected",
     modelDataVerifiedAt: modelSummaries.length > 0 ? verifiedAt : undefined,
+    latitude: location?.status === "matched" ? location.latitude ?? undefined : undefined,
+    longitude: location?.status === "matched" ? location.longitude ?? undefined : undefined,
+    geocodeQuery: location?.query_used ?? undefined,
+    geocodeStatus: location?.status ?? (Deno.env.get("KAKAO_LOCAL_REST_KEY") ? undefined : "not-configured"),
     events: identifiedEvents,
     lastVerifiedAt: verifiedAt,
   };
@@ -430,10 +499,92 @@ async function writeModelCache(row: ModelCacheRow & { last_error?: string | null
   if (!res.ok) throw new Error(`주택형 캐시 저장 실패 ${res.status}`);
 }
 
+async function readLocationCache(): Promise<Map<string, LocationCacheRow>> {
+  const credentials = supabaseCredentials();
+  if (!credentials) return new Map();
+  const res = await fetch(`${credentials.url}/rest/v1/notice_location_cache?select=*&limit=1000`, {
+    headers: { apikey: credentials.serviceRole, authorization: `Bearer ${credentials.serviceRole}` },
+  });
+  if (!res.ok) throw new Error(`위치 캐시 조회 실패 ${res.status}`);
+  const rows = await res.json() as LocationCacheRow[];
+  return new Map(rows.map((row) => [row.notice_key, row]));
+}
+
+async function writeLocationCache(row: LocationCacheRow): Promise<void> {
+  const credentials = supabaseCredentials();
+  if (!credentials) return;
+  const res = await fetch(`${credentials.url}/rest/v1/notice_location_cache?on_conflict=notice_key`, {
+    method: "POST",
+    headers: {
+      apikey: credentials.serviceRole,
+      authorization: `Bearer ${credentials.serviceRole}`,
+      "content-type": "application/json",
+      prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) throw new Error(`위치 캐시 저장 실패 ${res.status}`);
+}
+
+async function refreshLocationCache(items: RawItem[]): Promise<void> {
+  const kakaoKey = Deno.env.get("KAKAO_LOCAL_REST_KEY");
+  if (!kakaoKey) return;
+  for (const raw of items) {
+    const key = modelKey(raw);
+    const rawAddress = text(raw.HSSPLY_ADRES) ?? "";
+    if (!key || !rawAddress) continue;
+    let matched: LocationCacheRow | null = null;
+    try {
+      for (const query of locationQueries(raw)) {
+        const url = new URL("https://dapi.kakao.com/v2/local/search/address.json");
+        url.searchParams.set("query", query);
+        const res = await fetch(url, { headers: { authorization: `KakaoAK ${kakaoKey}` } });
+        if (!res.ok) throw new Error(`Kakao Local ${res.status}`);
+        const body = await res.json() as { documents?: Array<{ x: string; y: string; address_name?: string; address?: { region_1depth_name?: string } }> };
+        const document = body.documents?.find((item) => sameRegion(text(raw.SUBSCRPT_AREA_CODE_NM), item.address?.region_1depth_name));
+        if (!document) continue;
+        matched = {
+          notice_key: key,
+          raw_address: rawAddress,
+          normalized_address: document.address_name ?? query,
+          query_used: query,
+          latitude: Number(document.y),
+          longitude: Number(document.x),
+          status: "matched",
+          provider: "kakao-local",
+          fetched_at: new Date().toISOString(),
+          retry_after: null,
+          last_error: null,
+        };
+        break;
+      }
+      await writeLocationCache(matched ?? {
+        notice_key: key,
+        raw_address: rawAddress,
+        status: "not-found",
+        provider: "kakao-local",
+        fetched_at: new Date().toISOString(),
+        retry_after: new Date(Date.now() + LOCATION_RETRY_MS).toISOString(),
+        last_error: "주소 후보에서 지역이 일치하는 좌표를 찾지 못함",
+      });
+    } catch (error) {
+      await writeLocationCache({
+        notice_key: key,
+        raw_address: rawAddress,
+        status: "not-found",
+        provider: "kakao-local",
+        fetched_at: new Date().toISOString(),
+        retry_after: new Date(Date.now() + LOCATION_RETRY_MS).toISOString(),
+        last_error: error instanceof Error ? error.message.slice(0, 500) : "unknown",
+      }).catch(() => {});
+    }
+  }
+}
+
 function relevantAptDetails(items: RawItem[]): RawItem[] {
   const now = Date.now();
-  const date = new Date();
-  const nextMonthEnd = Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 2, 1) - 1;
+  const [year, month] = kstDateKey(new Date(now)).split("-").map(Number);
+  const nextMonthEnd = Date.UTC(year, month + 1, 1) - 9 * 60 * 60 * 1000 - 1;
   return items.filter((raw) => {
     const events = eventsFor(raw, "apt");
     if (events.length === 0) return false;
@@ -518,6 +669,7 @@ Deno.serve(async (req) => {
 
     const verifiedAt = new Date().toISOString();
     const aptCache = await readModelCache().catch(() => new Map<string, ModelCacheRow>());
+    const locationCache = await readLocationCache().catch(() => new Map<string, LocationCacheRow>());
     const relevantApt = relevantAptDetails(aptDetails);
     const refreshTargets = relevantApt.filter((raw) => {
       const cached = aptCache.get(modelKey(raw));
@@ -526,9 +678,19 @@ Deno.serve(async (req) => {
       return Date.now() - Date.parse(cached.fetched_at) >= MODEL_CACHE_TTL_MS;
     });
     if (refreshTargets.length > 0) runInBackground(refreshAptModelCache(serviceKey, refreshTargets));
+    const locationTargets = [...remndrDetails, ...aptDetails].filter((raw) => {
+      if (!text(raw.HSSPLY_ADRES)) return false;
+      const cached = locationCache.get(modelKey(raw));
+      return !cached || (cached.retry_after != null && Date.parse(cached.retry_after) <= Date.now());
+    }).slice(0, 8);
+    if (locationTargets.length > 0) runInBackground(refreshLocationCache(locationTargets));
     const notices = [
-      ...remndrDetails.map((raw) => normalize(raw, remndrModelsByNotice.get(modelKey(raw)) ?? [], verifiedAt, "remndr")),
-      ...aptDetails.map((raw) => normalize(raw, aptCache.get(modelKey(raw))?.models ?? [], verifiedAt, "apt")),
+      ...remndrDetails.map((raw) => normalize(raw, remndrModelsByNotice.get(modelKey(raw)) ?? [], verifiedAt, "remndr", undefined, locationCache.get(modelKey(raw)))),
+      ...aptDetails.map((raw) => {
+        const cached = aptCache.get(modelKey(raw));
+        const retrying = cached?.retry_after && Date.parse(cached.retry_after) > Date.now();
+        return normalize(raw, cached?.models ?? [], verifiedAt, "apt", retrying ? "retrying" : "not-collected", locationCache.get(modelKey(raw)));
+      }),
     ]
       .filter((notice) => notice !== null)
       .sort((a, b) => Date.parse(a.receiptStart) - Date.parse(b.receiptStart));

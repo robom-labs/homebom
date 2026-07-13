@@ -100,9 +100,17 @@ export function normalizeYmd(value: unknown): string | null {
   const raw = String(value ?? "").trim();
   const match = raw.match(/^(\d{4})-?(\d{2})-?(\d{2})$/);
   if (!match) return null;
-  const [, year, month, day] = match;
-  const ymd = `${year}-${month}-${day}`;
-  return Number.isNaN(Date.parse(`${ymd}T00:00:00+09:00`)) ? null : ymd;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (
+    utc.getUTCFullYear() !== year
+    || utc.getUTCMonth() !== month - 1
+    || utc.getUTCDate() !== day
+  ) return null;
+  return `${yearText}-${monthText}-${dayText}`;
 }
 
 /** HOUSE_SECD 코드로 공고 유형을 판정한다. 06은 최신 사용자 명칭으로 정규화한다. */
@@ -243,6 +251,11 @@ function dedupeEvents(events: Array<ApplicationEvent | null>): ApplicationEvent[
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
+function withoutReceiptSummaryWhenDetailed(events: Array<ApplicationEvent | null>): Array<ApplicationEvent | null> {
+  const hasDetailedReceipt = events.some((item) => item && ["special", "rank1", "rank2"].includes(item.kind));
+  return hasDetailedReceipt ? events.filter((item) => item?.kind !== "receipt") : events;
+}
+
 export function buildRemndrEvents(raw: RawRemndrItem, noticeId?: string): ApplicationEvent[] {
   return identifyEvents(dedupeEvents([
     event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59", "RCRIT_PBLANC_DE"),
@@ -253,7 +266,7 @@ export function buildRemndrEvents(raw: RawRemndrItem, noticeId?: string): Applic
 }
 
 export function buildAptEvents(raw: RawAptItem, noticeId?: string): ApplicationEvent[] {
-  return identifyEvents(dedupeEvents([
+  return identifyEvents(dedupeEvents(withoutReceiptSummaryWhenDetailed([
     event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59", "RCRIT_PBLANC_DE"),
     event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE, "09:00", "17:30", "RCEPT_BGNDE", "all"),
     event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE, "09:00", "17:30", "SPSPLY_RCEPT_BGNDE", "all"),
@@ -265,7 +278,7 @@ export function buildAptEvents(raw: RawAptItem, noticeId?: string): ApplicationE
     event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE, "09:00", "17:30", "GNRL_RNK2_ETC_AREA_RCPTDE", "other"),
     event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59", "PRZWNER_PRESNATN_DE"),
     event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "09:00", "17:30", "CNTRCT_CNCLS_BGNDE"),
-  ]), noticeId);
+  ])), noticeId);
 }
 
 /**

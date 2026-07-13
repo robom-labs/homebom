@@ -1,5 +1,5 @@
 // 공고 상세 화면. 카운트다운·알림 프리셋·청약홈 딥링크를 제공한다.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { Notice } from "@zoopzoopcall/core";
 import {
@@ -31,6 +31,7 @@ import {
 } from "../notify/notifications";
 import type { useSubscriptions } from "../hooks/useSubscriptions";
 import { noticeSchedule } from "../components/noticeSchedule";
+import { specialSupplyEntries } from "../components/specialSupply";
 
 type Props = {
   notices: Notice[];
@@ -43,7 +44,37 @@ export function DetailScreen({ notices, subscriptions }: Props) {
   const now = useNow(15_000);
   const [permission, setPermission] = useState<PermissionState>(() => notificationSupport());
   const [mapOpen, setMapOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("");
+  const mapSheetRef = useRef<HTMLElement>(null);
+  const mapTriggerRef = useRef<HTMLButtonElement>(null);
   const notice = notices.find((n) => n.id === id);
+
+  useEffect(() => {
+    if (!mapOpen) return;
+    const sheet = mapSheetRef.current;
+    const focusable = sheet?.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])');
+    focusable?.[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMapOpen(false);
+        window.requestAnimationFrame(() => mapTriggerRef.current?.focus());
+        return;
+      }
+      if (event.key !== "Tab" || !focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mapOpen]);
 
   if (!notice) {
     return (
@@ -84,6 +115,14 @@ export function DetailScreen({ notices, subscriptions }: Props) {
   const receiptStartLabel = formatKstDateTime(notice.receiptStart);
   const schedule = noticeSchedule(notice);
   const mapCandidates = addressSearchCandidates(notice.address, notice.houseName, notice.region);
+  const coordinateUrl = notice.latitude != null && notice.longitude != null
+    ? `https://map.kakao.com/link/map/${encodeURIComponent(notice.houseName)},${notice.latitude},${notice.longitude}`
+    : null;
+  const modelStatus = notice.modelDataStatus === "collected"
+    ? "주택형 정보 확인 완료"
+    : notice.modelDataStatus === "retrying"
+      ? "호출 제한으로 잠시 후 재시도"
+      : "주택형 정보 수집 중 또는 공고문 확인";
   const rows: Array<[string, string | undefined]> = [
     ["청약 유형", notice.type],
     ["주택 형태", housingCategory],
@@ -103,6 +142,20 @@ export function DetailScreen({ notices, subscriptions }: Props) {
     ["문의처", notice.contactPhone],
     ["신문사", notice.newspaperName],
   ];
+
+  const closeMap = () => {
+    setMapOpen(false);
+    window.requestAnimationFrame(() => mapTriggerRef.current?.focus());
+  };
+
+  const copyAddress = async (candidate: string) => {
+    try {
+      await navigator.clipboard.writeText(candidate);
+      setCopyStatus("주소를 복사했습니다.");
+    } catch {
+      setCopyStatus("주소 복사에 실패했습니다.");
+    }
+  };
 
   return (
     <div className="screen">
@@ -225,7 +278,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
           </a>
         )}
         {mapCandidates.length > 0 && (
-          <button className="btn btn--ghost btn--big" type="button" onClick={() => setMapOpen(true)}>
+          <button ref={mapTriggerRef} className="btn btn--ghost btn--big" type="button" onClick={() => { setCopyStatus(""); setMapOpen(true); }}>
             지도 검색 선택
           </button>
         )}
@@ -236,20 +289,22 @@ export function DetailScreen({ notices, subscriptions }: Props) {
         )}
       </div>
       {mapOpen && (
-        <div className="sheet-backdrop" role="presentation" onClick={() => setMapOpen(false)}>
-          <section className="map-sheet" role="dialog" aria-modal="true" aria-labelledby="map-sheet-title" onClick={(event) => event.stopPropagation()}>
-            <div className="map-sheet__head"><h2 id="map-sheet-title">위치 검색</h2><button type="button" onClick={() => setMapOpen(false)} aria-label="닫기">×</button></div>
-            <p>공식 좌표가 없을 때는 주소 후보를 골라 지도에서 확인하세요.</p>
+        <div className="sheet-backdrop" role="presentation" onClick={closeMap}>
+          <section ref={mapSheetRef} className="map-sheet" role="dialog" aria-modal="true" aria-labelledby="map-sheet-title" aria-describedby="map-sheet-desc" onClick={(event) => event.stopPropagation()}>
+            <div className="map-sheet__head"><h2 id="map-sheet-title">위치 확인</h2><button type="button" onClick={closeMap} aria-label="닫기">×</button></div>
+            <p id="map-sheet-desc">공식 좌표가 있으면 바로 열고, 없으면 주소 후보를 골라 지도에서 확인하세요.</p>
+            {coordinateUrl && <a className="map-sheet__coordinate" href={coordinateUrl} target="_blank" rel="noreferrer">확인된 좌표로 카카오맵 열기</a>}
             {mapCandidates.map((candidate) => (
               <div className="map-sheet__candidate" key={candidate}>
                 <strong>{candidate}</strong>
                 <span>
                   <a href={naverMapSearchUrl(candidate)} target="_blank" rel="noreferrer">네이버 지도</a>
                   <a href={kakaoMapSearchUrl(candidate)} target="_blank" rel="noreferrer">카카오맵</a>
-                  <button type="button" onClick={() => void navigator.clipboard?.writeText(candidate)}>주소 복사</button>
+                  <button type="button" onClick={() => void copyAddress(candidate)}>주소 복사</button>
                 </span>
               </div>
             ))}
+            <p className="map-sheet__toast" role="status" aria-live="polite">{copyStatus}</p>
           </section>
         </div>
       )}
@@ -286,31 +341,30 @@ export function DetailScreen({ notices, subscriptions }: Props) {
         </ol>
       </section>
 
-      {notice.modelSummaries && notice.modelSummaries.length > 0 && (
-        <section className="detail__models">
+      <section className="detail__models">
           <h2>주택형·분양가</h2>
-          {notice.modelSummaries.map((model) => (
+          <p className={`model-status model-status--${notice.modelDataStatus ?? "not-collected"}`}>{modelStatus}</p>
+          {notice.modelSummaries && notice.modelSummaries.length > 0 ? notice.modelSummaries.map((model) => {
+            const specialEntries = specialSupplyEntries(model);
+            return (
             <div className="model-row" key={`${model.modelNo ?? ""}-${model.houseType ?? ""}`}>
               <div>
                 <strong>{formatHouseTypeLabel(model.houseType) ?? "주택형 확인"}</strong>
-                <span>{formatArea(model.supplyArea) ?? "면적 공고문 확인"}</span>
+                <span>{formatArea(model.supplyArea) ? `공급면적 ${formatArea(model.supplyArea)}` : "공급면적 공고문 확인"}</span>
               </div>
               <div>
                 <span>
                   {model.supplyCount != null ? `일반 ${model.supplyCount}세대` : "일반공급 확인 필요"}
                   {model.specialSupplyCount != null ? ` · 특별 ${model.specialSupplyCount}세대` : ""}
                 </span>
-                {model.specialSupply && (
-                  <small className="model-row__special">
-                    {Object.entries(model.specialSupply).filter(([, count]) => count != null).map(([key, count]) => `${({ multiChild: "다자녀", newlywed: "신혼", firstLife: "생애최초", oldParent: "노부모", institution: "기관추천", other: "기타", transferInstitution: "이전기관", youth: "청년", newborn: "신생아" } as Record<string, string>)[key]} ${count}`).join(" · ") || "특별공급 세부 유형 확인 필요"}
-                  </small>
-                )}
+                {model.specialSupply && <ul className="model-row__special">{specialEntries.length > 0 ? specialEntries.map((item) => <li key={item.key}><span>{item.label}</span><strong>{item.count}세대</strong></li>) : <li>특별공급 세부 필드 없음</li>}</ul>}
                 <strong>{model.priceMax ? formatManwon(model.priceMax) : "금액 확인 필요"}</strong>
               </div>
             </div>
-          ))}
+          );
+          }) : <p className="model-empty">세부 주택형과 공급량은 모집공고 원문에서 확인해 주세요.</p>}
+          <p className="model-disclaimer">표시된 특별공급 세대수는 공급량이며 개인의 청약 자격을 판정하지 않습니다.</p>
         </section>
-      )}
 
       <p className="fineprint">
         출처: 한국부동산원 청약홈 분양정보. 정정·취소로 일정이 바뀔 수 있으니 신청 전 모집공고 원문과
