@@ -301,7 +301,7 @@ a { color: inherit; }
 .card__value--price { font-weight: 800; }
 .card__value--next { color: var(--accent-deep); font-weight: 800; }
 .card__value--muted { color: var(--muted); }
-@media (prefers-color-scheme: dark) { :root { color-scheme: light; --page: #fffaf3; --surface: #ffffff; --surface-muted: #fff4e7; --hero: #eef8ed; --hero-strong: #e0f2e2; --ink: #27342b; --muted: #68756d; --line: #e7dfd4; --accent: #4ea565; --accent-deep: #287141; --primary: var(--accent); --primary-soft: var(--hero-strong); --danger: #d86b5a; --shadow: 0 14px 34px rgba(92, 67, 44, .08); } }
+@media (prefers-color-scheme: dark) { :root { color-scheme: light; --page: #fffaf3; --surface: #ffffff; --surface-muted: #fff4e7; --hero: #eef8ed; --hero-strong: #e0f2e2; --ink: #27342b; --muted: #68756d; --line: #e7dfd4; --accent: #4ea565; --accent-deep: #287141; --primary: var(--accent); --primary-soft: var(--hero-strong); --danger: #d86b5a; --danger-soft: #fbeae6; --warning: #926611; --warning-soft: #fff3d5; --shadow: 0 14px 34px rgba(92, 67, 44, .08); } }
 @media (max-width: 420px) { .notice-calendar { padding: 13px 11px; }.notice-calendar__dow, .notice-calendar__grid { gap: 3px; }.notice-calendar__blank, .notice-calendar__day { min-height: 44px; border-radius: 10px; }.notice-calendar__day strong { font-size: 14px; } }
 
 @media (max-width: 599px) {
@@ -353,6 +353,7 @@ a { color: inherit; }
 .notice-calendar__marker--winner, .notice-calendar__marker--contract { color: #67479d; background: #f0eafb; }
 .notice-calendar__marker--rank1, .notice-calendar__marker--rank2 { color: #805600; background: #fff0c8; }
 .notice-calendar__more { color: var(--muted); background: var(--surface-muted); text-align: center; }
+.notice-calendar__marker--end { color: var(--warning); background: var(--warning-soft); }
 .notice-calendar__day.is-today .notice-calendar__marker, .notice-calendar__day.is-today .notice-calendar__more { color: var(--accent-deep); background: #fff; }
 .day-agenda { margin: 10px 0 16px; padding: 14px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
 .day-agenda__item { display: grid; gap: 4px; padding: 14px 0; border-top: 1px solid var(--line); }

@@ -1,5 +1,5 @@
 // 공고 데이터를 실공고 프록시(VITE_NOTICES_URL)에서만 로드하는 훅.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { enrichNoticeWithComplexProfile, sanitizeNoticeUrls, type Notice } from "@zoopzoopcall/core";
 
 // 서버가 고쳐지기 전 저장된 캐시나 구버전 응답의 깨진 외부 링크(`&amp;`)까지
@@ -105,6 +105,23 @@ export function useNotices() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // PWA를 오래 켜둔 사용자가 낡은 공고를 계속 보지 않도록, 탭 복귀 시 10분 넘게
+  // 지난 데이터만 조용히 다시 불러온다 (짧은 전환에는 재요청하지 않음).
+  const lastLoadedAtRef = useRef(Date.now());
+  useEffect(() => {
+    if (!loading) lastLoadedAtRef.current = Date.now();
+  }, [loading]);
+  useEffect(() => {
+    const REFRESH_AFTER_MS = 10 * 60 * 1000;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastLoadedAtRef.current < REFRESH_AFTER_MS) return;
+      void load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [load]);
 
   return { notices, source, error, loading, verifiedAt, reload: load };

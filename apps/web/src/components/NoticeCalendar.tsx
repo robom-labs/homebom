@@ -57,6 +57,9 @@ export function NoticeCalendar({ notices, now, selectedKey, onSelectDay }: Props
               return <span className="notice-calendar__blank" key={`blank-${index}`} aria-hidden="true" />;
             }
             const count = cell.markers.length;
+            // 마커는 시작일에만 붙지만 마감일도 아젠다(eventsOnDate)가 기간 매칭으로 일정을 보여준다 —
+            // aria-label이 "마감 N건"을 읽어주는 날을 클릭 불가로 두지 않는다.
+            const hasSchedule = count > 0 || cell.ends > 0;
             const selected = selectedKey === cell.key;
             const detail = [
               cell.starts ? `접수 ${cell.starts}건` : "",
@@ -73,7 +76,7 @@ export function NoticeCalendar({ notices, now, selectedKey, onSelectDay }: Props
                 className={`notice-calendar__day${cell.today ? " is-today" : ""}${selected ? " is-selected" : ""}`}
                 aria-pressed={selected}
                 aria-label={`${cell.day}일 ${detail || "일정 없음"}`}
-                disabled={count === 0}
+                disabled={!hasSchedule}
                 onClick={() => onSelectDay?.(selected ? null : cell.key)}
               >
                 <strong>{cell.day}</strong>
@@ -82,6 +85,7 @@ export function NoticeCalendar({ notices, now, selectedKey, onSelectDay }: Props
                     <i key={`${marker.kind}-${marker.label}`} className={`notice-calendar__marker notice-calendar__marker--${marker.kind}`}>{marker.label}</i>
                   ))}
                   {cell.markers.length > 2 && <i className="notice-calendar__more">+{cell.markers.length - 2}</i>}
+                  {count === 0 && cell.ends > 0 && <i className="notice-calendar__marker notice-calendar__marker--end">마감</i>}
                 </span>
               </button>
             );

@@ -1,6 +1,6 @@
 // 설정과 앱 정보. 로봄 패밀리 공통 설정 UI 킷(야외봄 정본)을 청약봄 팔레트로 렌더한다.
 // 구조: 브랜드 헤더+구분선 → 앱 소개 → 알림 권한 → 다른 로봄 앱 → 문의 → 데이터 출처 → 정책과 정보 → 앱 메타 카드.
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { NoticeSource } from "../hooks/useNotices";
 import packageInfo from "../../package.json";
 import { AppHeader } from "../components/AppHeader";
@@ -9,7 +9,7 @@ import { notificationSupport, requestPermission } from "../notify/notifications"
 const APP_VERSION = packageInfo.version;
 const CONTACT = "hello.robom@gmail.com";
 const BUILD_SHA = import.meta.env.VITE_BUILD_SHA || "local";
-const PWA_CACHE = "zzc-v18";
+const PWA_CACHE = "zzc-v19";
 
 function mailto(purpose: string): string {
   const subject = `[청약봄] ${purpose} 문의 · v${APP_VERSION}`;
@@ -78,10 +78,21 @@ function SettingsRow({ href, icon, title, sub, badge, newTab = true }: RowProps)
 }
 
 export function InfoScreen({ source }: { source: NoticeSource }) {
-  const [permission, setPermission] = useState<string>(() =>
-    notificationSupport() ? Notification.permission : "unsupported",
-  );
+  // notificationSupport()가 "unsupported" 또는 현재 권한 문자열을 반환한다 — Notification 전역을
+  // 직접 읽으면 미지원 브라우저(아이폰 사파리 탭 등)에서 ReferenceError로 설정 화면 전체가 죽는다.
+  const [permission, setPermission] = useState<string>(() => notificationSupport());
   const [guide, setGuide] = useState<string | null>(null);
+
+  // 폰 설정에서 권한을 바꾸고 돌아온 경우 화면 문구를 실제 권한 상태와 다시 맞춘다.
+  useEffect(() => {
+    const sync = () => setPermission(notificationSupport());
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, []);
 
   const permissionLabel =
     permission === "granted"
@@ -117,7 +128,8 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
           화면에 추가)으로 열어야 알림을 받을 수 있어요.
         </p>
         <div className="settings-deeplinks">
-          {permission !== "granted" && permission !== "unsupported" && (
+          {/* denied 상태의 requestPermission()은 대부분 브라우저에서 no-op — 그때는 폰 설정 안내만 남긴다. */}
+          {permission === "default" && (
             <button
               type="button"
               className="primary-action"

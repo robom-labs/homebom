@@ -1,5 +1,6 @@
 // 공고 목록 화면. 유형·지역 필터 + 접수중/예정/마감·취소 상태를 골라 본다.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import type { ApplicationEvent, Notice } from "@zoopzoopcall/core";
 import { formatKstDateTime, getNoticeStatus, kstMonthWindowEnd } from "@zoopzoopcall/core";
 import { AppHeader } from "../components/AppHeader";
@@ -127,7 +128,8 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
     <div className="screen">
       <AppHeader source={source} />
 
-      {error && <div className="notice-bar">{error}</div>}
+      {/* stale이면 아래 전용 배너가 같은 내용을 안내하므로 generic 오류 바를 겹쳐 띄우지 않는다. */}
+      {error && source !== "stale" && <div className="notice-bar">{error}</div>}
       {source === "stale" && (
         <div className="notice-bar notice-bar--stale" role="status">
           공식 공고 연결이 잠시 지연돼 마지막 확인본을 보여드려요.
@@ -160,8 +162,9 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
               <small>{notice.region} · {notice.supplyCount != null ? `${notice.supplyCount.toLocaleString("ko-KR")}세대` : "모집 세대 공고문 확인"}</small>
               <time dateTime={event.start}>{formatKstDateTime(event.start)}{event.end && event.end !== event.start ? ` ~ ${formatKstDateTime(event.end)}` : ""}</time>
               <div className="day-agenda__actions">
-                <a href={`/homebom/notice/${encodeURIComponent(notice.id)}`}>상세</a>
-                <a href={`/homebom/notice/${encodeURIComponent(notice.id)}#alerts`}>{notice.id in subs ? "알림 설정됨" : "이 일정 알림"}</a>
+                {/* HashRouter 앱이므로 path 하드코딩(/homebom/…)은 풀 페이지 이동 → GitHub Pages 404가 된다. */}
+                <Link to={`/notice/${encodeURIComponent(notice.id)}`}>상세</Link>
+                <Link to={`/notice/${encodeURIComponent(notice.id)}#alerts`}>{notice.id in subs ? "알림 설정됨" : "이 일정 알림"}</Link>
               </div>
             </div>
           )) : <p className="section-empty">선택한 날의 일정이 없어요.</p>}

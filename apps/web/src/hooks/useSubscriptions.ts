@@ -79,7 +79,8 @@ export function useSubscriptions() {
         ? list.filter((o) => o !== offset)
         : [...list, offset].sort((a, b) => b - a);
       const nextEntry = { ...entry, [kind]: nextList };
-      if (nextEntry.open.length === 0 && nextEntry.close.length === 0) {
+      // 세부 일정(eventIds) 알림만 남긴 사용자의 설정을 시작·마감 칩 해제가 통째로 지우지 않게 한다.
+      if (nextEntry.open.length === 0 && nextEntry.close.length === 0 && (nextEntry.eventIds?.length ?? 0) === 0) {
         unsubscribe(id);
         return;
       }
