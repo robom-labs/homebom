@@ -1,7 +1,7 @@
 {
   "name": "homebom",
   "private": true,
-  "version": "0.11.0",
+  "version": "0.11.1",
   "scripts": {
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
