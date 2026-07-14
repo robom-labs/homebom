@@ -32,6 +32,37 @@ export type NoticeModelSummary = {
   priceMax?: number;
 };
 
+/** 공고문에서만 확인되는 의사결정 정보. 값이 없으면 화면에서 추측하지 않는다. */
+export type NoticeDecisionSupport = {
+  subscriptionAccount?: string;
+  selectionMethod?: string;
+  applicantQualification?: string;
+  transferRestriction?: string;
+  residenceRequirement?: string;
+  rewinningRestriction?: string;
+  constructionCompanyName?: string;
+  paymentSchedule?: Array<{
+    label: string;
+    ratio?: string;
+    amountManwon?: number;
+    timing?: string;
+  }>;
+  costWarning?: string;
+  source?: "notice-pdf";
+  verifiedAt?: string;
+};
+
+/** 국토부 실거래 원자료를 청약봄이 계산한 가격 비교 신호. 저신뢰 값은 노출하지 않는다. */
+export type NoticePriceSignal = {
+  percentBelowMedian: number;
+  confidence: "high" | "low";
+  source: "molit-trade";
+  sourceLabel: string;
+  comparisonAreaLabel: string;
+  sampleMonths: number;
+  verifiedAt: string;
+};
+
 export type ApplicationEventKind =
   | "announce"
   | "receipt"
@@ -129,4 +160,8 @@ export type Notice = {
   events?: ApplicationEvent[];
   /** 데이터 확인 시각 (UTC ISO). */
   lastVerifiedAt: string;
+  /** 공고문 PDF를 구조화해 검증한 값. 없는 필드는 공고문 확인으로 남긴다. */
+  decisionSupport?: NoticeDecisionSupport;
+  /** 국토부 실거래 기반 파생값. 충분한 표본과 고신뢰일 때만 화면에 표시한다. */
+  priceSignal?: NoticePriceSignal;
 };

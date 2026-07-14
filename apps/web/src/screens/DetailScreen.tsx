@@ -1,27 +1,26 @@
-// 공고 상세 화면. 카운트다운·알림 프리셋·청약홈 딥링크를 제공한다.
-import { useEffect, useRef, useState } from "react";
+// 공고 상세 화면. 공식 데이터와 공고문 값을 구분해 신청 판단 순서로 보여준다.
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { Notice } from "@zoopzoopcall/core";
 import {
   DEFAULT_CLOSE_OFFSETS,
   DEFAULT_OPEN_OFFSETS,
-  formatArea,
-  formatHouseTypeLabel,
+  addressSearchCandidates,
+  ddayKst,
   formatKstDate,
   formatKstDateTime,
   formatManwon,
-  formatPriceRange,
   getNoticeStatus,
   inferHousingCategory,
   isClosingSoon,
-  offsetLabel,
-  addressSearchCandidates,
   kakaoMapSearchUrl,
   naverMapSearchUrl,
+  offsetLabel,
+  pyeongFromSqm,
   type AlertKind,
 } from "@zoopzoopcall/core";
 import { Countdown } from "../components/Countdown";
-import { CorrectionBadge, StatusBadge, TypeBadge } from "../components/StatusBadge";
+import { CorrectionBadge, StatusBadge } from "../components/StatusBadge";
 import { PermissionBanner } from "../components/PermissionBanner";
 import { useNow } from "../hooks/useNow";
 import {
@@ -31,12 +30,79 @@ import {
 } from "../notify/notifications";
 import type { useSubscriptions } from "../hooks/useSubscriptions";
 import { noticeSchedule } from "../components/noticeSchedule";
-import { specialSupplyEntries } from "../components/specialSupply";
 
 type Props = {
   notices: Notice[];
   subscriptions: ReturnType<typeof useSubscriptions>;
 };
+
+type InfoRowProps = {
+  label: string;
+  value: ReactNode;
+  wide?: boolean;
+};
+
+function InfoRow({ label, value, wide = false }: InfoRowProps) {
+  return (
+    <div className={`decision-info__row${wide ? " decision-info__row--wide" : ""}`}>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+function trimDecimal(value: number, fractionDigits: number) {
+  return value.toFixed(fractionDigits).replace(/\.?0+$/, "");
+}
+
+function modelAreas(notice: Notice): number[] {
+  return Array.from(new Set((notice.modelSummaries ?? [])
+    .map((model) => Number.parseFloat(String(model.supplyArea ?? "")))
+    .filter((value) => Number.isFinite(value) && value > 0)))
+    .sort((a, b) => a - b);
+}
+
+function AreaValue({ areas }: { areas: number[] }) {
+  if (areas.length === 0) return <>공고문 확인</>;
+  const first = areas[0];
+  const last = areas[areas.length - 1];
+  if (first === last) {
+    return (
+      <>
+        <span className="detail__nowrap">{trimDecimal(first, 2)}㎡</span>
+        <span className="detail__muted-separator"> · </span>
+        <span className="detail__nowrap detail__accent">약 {trimDecimal(pyeongFromSqm(first), 1)}평</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="detail__nowrap">{trimDecimal(first, 2)}~{trimDecimal(last, 2)}㎡</span>
+      <span className="detail__muted-separator"> · </span>
+      <span className="detail__nowrap detail__accent">약 {trimDecimal(pyeongFromSqm(first), 1)}~{trimDecimal(pyeongFromSqm(last), 1)}평</span>
+    </>
+  );
+}
+
+function PriceValue({ notice }: { notice: Notice }) {
+  const { priceMin, priceMax } = notice;
+  if (priceMin == null && priceMax == null) return <>공고문 확인</>;
+  if (priceMin != null && priceMax != null && priceMin !== priceMax) {
+    return (
+      <>
+        <span className="detail__nowrap">{formatManwon(priceMin)}</span>
+        <span className="detail__muted-separator"> ~ </span>
+        <span className="detail__nowrap">{formatManwon(priceMax)}</span>
+      </>
+    );
+  }
+  return <span className="detail__nowrap">{formatManwon(priceMax ?? priceMin!)}</span>;
+}
+
+function sumKnown(values: Array<number | undefined>): number | undefined {
+  const known = values.filter((value): value is number => value != null);
+  return known.length > 0 ? known.reduce((sum, value) => sum + value, 0) : undefined;
+}
 
 export function DetailScreen({ notices, subscriptions }: Props) {
   const { id } = useParams<{ id: string }>();
@@ -44,10 +110,11 @@ export function DetailScreen({ notices, subscriptions }: Props) {
   const now = useNow(15_000);
   const [permission, setPermission] = useState<PermissionState>(() => notificationSupport());
   const [mapOpen, setMapOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
   const mapSheetRef = useRef<HTMLElement>(null);
   const mapTriggerRef = useRef<HTMLButtonElement>(null);
-  const notice = notices.find((n) => n.id === id);
+  const notice = notices.find((item) => item.id === id);
 
   useEffect(() => {
     if (!mapOpen) return;
@@ -81,9 +148,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
       <div className="screen">
         <div className="empty">
           <p className="empty__title">공고를 찾을 수 없어요</p>
-          <Link to="/" className="btn btn--ghost">
-            목록으로 돌아가기
-          </Link>
+          <Link to="/" className="btn btn--ghost">목록으로 돌아가기</Link>
         </div>
       </div>
     );
@@ -95,6 +160,34 @@ export function DetailScreen({ notices, subscriptions }: Props) {
   const entry = subs[notice.id];
   const subscribed = isSubscribed(notice.id);
   const finished = status === "마감" || status === "취소";
+  const schedule = noticeSchedule(notice).filter((item) => item.kind !== "announce");
+  const areas = modelAreas(notice);
+  const decision = notice.decisionSupport?.source === "notice-pdf" ? notice.decisionSupport : undefined;
+  const priceSignal = notice.priceSignal?.confidence === "high"
+    && notice.priceSignal.source === "molit-trade"
+    && notice.priceSignal.percentBelowMedian > 0
+    && notice.priceSignal.sampleMonths > 0
+    ? notice.priceSignal
+    : undefined;
+  const mapCandidates = addressSearchCandidates(notice.address, notice.houseName, notice.region);
+  const coordinateUrl = notice.latitude != null && notice.longitude != null
+    ? `https://map.kakao.com/link/map/${encodeURIComponent(notice.houseName)},${notice.latitude},${notice.longitude}`
+    : null;
+  const housingCategory = inferHousingCategory(notice.housingCategory, notice.sourceOperation);
+  const targetIso = status === "접수중" ? notice.receiptEnd : notice.receiptStart;
+  const targetDday = ddayKst(targetIso, now);
+  const deadlineBadge = status === "취소"
+    ? "공고 취소"
+    : status === "마감"
+      ? "접수 마감"
+      : status === "접수중"
+        ? targetDday === 0 ? "오늘 마감 D-0" : `마감 D-${targetDday}`
+        : targetDday === 0 ? "오늘 시작 D-0" : `시작 D-${targetDday}`;
+  const generalSupply = sumKnown((notice.modelSummaries ?? []).map((model) => model.supplyCount));
+  const specialSupply = sumKnown((notice.modelSummaries ?? []).map((model) => model.specialSupplyCount));
+  const houseTypes = Array.from(new Set((notice.modelSummaries ?? [])
+    .map((model) => model.houseType?.trim())
+    .filter((value): value is string => Boolean(value))));
 
   const onMasterToggle = async () => {
     if (subscribed) {
@@ -111,38 +204,6 @@ export function DetailScreen({ notices, subscriptions }: Props) {
     toggleOffset(notice.id, kind, off);
   };
 
-  const housingCategory = inferHousingCategory(notice.housingCategory, notice.sourceOperation);
-  const receiptStartLabel = formatKstDateTime(notice.receiptStart);
-  const schedule = noticeSchedule(notice);
-  const mapCandidates = addressSearchCandidates(notice.address, notice.houseName, notice.region);
-  const coordinateUrl = notice.latitude != null && notice.longitude != null
-    ? `https://map.kakao.com/link/map/${encodeURIComponent(notice.houseName)},${notice.latitude},${notice.longitude}`
-    : null;
-  const modelStatus = notice.modelDataStatus === "collected"
-    ? "주택형 정보 확인 완료"
-    : notice.modelDataStatus === "retrying"
-      ? "호출 제한으로 잠시 후 재시도"
-      : "주택형 정보 수집 중 또는 공고문 확인";
-  const rows: Array<[string, string | undefined]> = [
-    ["청약 유형", notice.type],
-    ["주택 형태", housingCategory],
-    ["지역", notice.region],
-    ["위치", notice.address],
-    ["우편번호", notice.zipCode],
-    ["단지 전체", notice.totalHouseholdCount != null ? `${notice.totalHouseholdCount.toLocaleString("ko-KR")}세대` : "공고문 확인"],
-    ["이번 모집", notice.supplyCount != null ? `${notice.supplyCount.toLocaleString("ko-KR")}세대` : "공고문 확인"],
-    ["분양가", formatPriceRange(notice) ?? "공고문 확인"],
-    ["모집공고일", notice.announceDate],
-    ["접수 시작", formatKstDateTime(notice.receiptStart)],
-    ["접수 마감", formatKstDateTime(notice.receiptEnd)],
-    ["당첨자 발표", notice.winnerDate],
-    ["계약기간", notice.contractStartDate && notice.contractEndDate ? `${notice.contractStartDate} ~ ${notice.contractEndDate}` : undefined],
-    ["입주예정", notice.moveInMonth],
-    ["시행사", notice.businessOwnerName],
-    ["문의처", notice.contactPhone],
-    ["신문사", notice.newspaperName],
-  ];
-
   const closeMap = () => {
     setMapOpen(false);
     window.requestAnimationFrame(() => mapTriggerRef.current?.focus());
@@ -157,44 +218,190 @@ export function DetailScreen({ notices, subscriptions }: Props) {
     }
   };
 
-  return (
-    <div className="screen">
-      <button className="back" onClick={() => navigate(-1)}>
-        ← 목록
-      </button>
+  const openMap = () => {
+    setCopyStatus("");
+    setMapOpen(true);
+  };
 
-      <div className="detail__badges">
-        <TypeBadge type={notice.type} />
-        <StatusBadge status={status} />
-        <CorrectionBadge corrected={notice.corrected} status={status} />
-      </div>
-      <h1 className="detail__title">{notice.houseName}</h1>
+  const scrollToAlerts = () => {
+    document.getElementById("alerts")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <div className="screen detail-screen">
+      <button className="back" onClick={() => navigate(-1)}>← 목록</button>
 
       {status === "취소" && (
         <div className="notice-bar">이 공고는 취소되었습니다. 청약홈에서 취소 공고를 확인하세요.</div>
       )}
       {notice.corrected && !finished && (
-        <div className="notice-bar">
-          정정 공고가 있었던 건입니다. 접수 일정이 바뀌었을 수 있으니 청약홈 원문을 꼭 확인하세요.
-        </div>
+        <div className="notice-bar">정정 공고가 있었던 건입니다. 신청 전 최신 청약홈 원문을 확인하세요.</div>
       )}
 
-      {!finished && (
-        <div className={`countdown${status === "접수중" && closingSoon ? " countdown--urgent" : ""}`}>
-          <p className="countdown__label">
-            {status === "접수중" ? "마감까지 남은 시간" : "접수 시작까지 남은 시간"}
+      <article className="decision-card" aria-labelledby="decision-card-title">
+        <header className="decision-card__deadline">
+          <div>
+            <span>{status === "접수중" ? "실시간 마감" : status === "예정" ? "접수 시작" : "접수 상태"}</span>
+            {!finished ? <Countdown targetIso={targetIso} /> : <strong className="countdown__value">{status === "취소" ? "취소" : "마감"}</strong>}
+          </div>
+          <span className={`decision-card__dday${status === "접수중" && closingSoon ? " decision-card__dday--urgent" : ""}`}>{deadlineBadge}</span>
+          <p>
+            <b>접수기간</b>
+            <span className="detail__nowrap">{formatKstDateTime(notice.receiptStart)}</span>
+            <span aria-hidden="true">~</span>
+            <span className="detail__nowrap">{formatKstDateTime(notice.receiptEnd)}</span>
           </p>
-          <Countdown targetIso={status === "접수중" ? notice.receiptEnd : notice.receiptStart} />
-        </div>
-      )}
+        </header>
 
-      {notice.noticeUrl && (
-        <div className="detail__actions">
-          <a className="btn btn--primary btn--big" href={notice.noticeUrl} target="_blank" rel="noreferrer">
-            모집공고 원문 보기
-          </a>
+        <div className="decision-card__identity">
+          <div className="detail__badges">
+            <span className="badge badge--type">{notice.type}</span>
+            {notice.supplyCount != null && <span className="badge badge--type"><span className="detail__nowrap">{notice.supplyCount.toLocaleString("ko-KR")}세대</span></span>}
+            {decision?.selectionMethod && <span className="badge badge--open">{decision.selectionMethod}</span>}
+            <StatusBadge status={status} />
+            <CorrectionBadge corrected={notice.corrected} status={status} />
+          </div>
+          <h1 id="decision-card-title" className="detail__title">{notice.houseName}</h1>
+          <p>{notice.address || `${notice.region} · 상세 위치는 공고문 확인`}</p>
+          <p className="decision-card__type">{housingCategory}{notice.officialTypeName ? ` · ${notice.officialTypeName}` : ""}</p>
         </div>
-      )}
+
+        {priceSignal && (
+          <aside className="price-signal" aria-label="인근 실거래 가격 비교">
+            <div>
+              <span>인근 실거래 대비</span>
+              <strong><span className="detail__nowrap">{trimDecimal(priceSignal.percentBelowMedian, 1)}%</span> 낮음</strong>
+            </div>
+            <span className="price-signal__confidence">고신뢰</span>
+            <p>{priceSignal.sourceLabel} · {priceSignal.comparisonAreaLabel} · 최근 <span className="detail__nowrap">{priceSignal.sampleMonths}개월</span> 중앙값</p>
+          </aside>
+        )}
+
+        <div className="decision-card__tiles">
+          <div className="decision-tile">
+            <span>분양가</span>
+            <strong><PriceValue notice={notice} /></strong>
+            <small>청약홈 구조화 값</small>
+          </div>
+          <div className="decision-tile">
+            <span>공급면적</span>
+            <strong><AreaValue areas={areas} /></strong>
+            <small>㎡와 평을 함께 표시</small>
+          </div>
+          <div className="decision-tile">
+            <span>모집세대</span>
+            <strong>{notice.supplyCount != null ? <span className="detail__nowrap">{notice.supplyCount.toLocaleString("ko-KR")}세대</span> : "공고문 확인"}</strong>
+            <small>이번 공고 기준</small>
+          </div>
+        </div>
+
+        <a className="btn btn--primary btn--big decision-card__apply" href={notice.applyHomeUrl} target="_blank" rel="noreferrer">
+          {status === "접수중" ? "청약홈에서 지금 신청" : status === "예정" ? "청약홈 접수처 확인" : "청약홈 공고 확인"}
+        </a>
+        <div className="decision-card__secondary-actions">
+          {!finished && <button type="button" onClick={scrollToAlerts}>{subscribed ? "알림 설정 보기" : "알림 설정"}</button>}
+          {mapCandidates.length > 0 && <button ref={mapTriggerRef} type="button" onClick={openMap}>지도</button>}
+        </div>
+
+        <button
+          className="decision-card__more"
+          type="button"
+          aria-expanded={moreOpen}
+          aria-controls="decision-card-more"
+          onClick={() => setMoreOpen((open) => !open)}
+        >
+          {moreOpen ? "접기" : "더 보기"}<span aria-hidden="true">{moreOpen ? "⌃" : "⌄"}</span>
+        </button>
+
+        {moreOpen && (
+          <div id="decision-card-more" className="decision-card__more-content">
+            <section className="decision-section" aria-labelledby="eligibility-title">
+              <h2 id="eligibility-title">신청 자격·제약</h2>
+              <div className="decision-section__pair">
+                <div><span>청약통장</span><strong>{decision?.subscriptionAccount ?? "공고문 확인"}</strong></div>
+                <div><span>당첨 방식</span><strong>{decision?.selectionMethod ?? "공고문 확인"}</strong></div>
+              </div>
+              <dl className="decision-info">
+                <InfoRow label="신청 자격" value={decision?.applicantQualification ?? "공고문 확인"} wide />
+              </dl>
+              <div className="decision-section__triple">
+                <div><span>전매제한</span><strong>{decision?.transferRestriction ?? "공고문 확인"}</strong></div>
+                <div><span>실거주 의무</span><strong>{decision?.residenceRequirement ?? "공고문 확인"}</strong></div>
+                <div><span>재당첨 제한</span><strong>{decision?.rewinningRestriction ?? "공고문 확인"}</strong></div>
+              </div>
+              <p className="decision-section__source">공고문 PDF 전용 값 · 확인되지 않은 값은 추측하지 않음</p>
+            </section>
+
+            <section className="decision-section" aria-labelledby="payment-title">
+              <h2 id="payment-title">납부 일정</h2>
+              {decision?.paymentSchedule?.length ? (
+                <dl className="payment-list">
+                  {decision.paymentSchedule.map((payment) => (
+                    <div key={`${payment.label}-${payment.timing ?? ""}`}>
+                      <dt>{payment.label}</dt>
+                      <dd>{payment.timing ?? "공고문 확인"}</dd>
+                      <strong>
+                        {payment.ratio && <span className="detail__nowrap">{payment.ratio}</span>}
+                        {payment.ratio && payment.amountManwon != null && <span aria-hidden="true"> · </span>}
+                        {payment.amountManwon != null && <span className="detail__nowrap">{formatManwon(payment.amountManwon)}</span>}
+                      </strong>
+                    </div>
+                  ))}
+                </dl>
+              ) : <p className="decision-section__empty">계약금·중도금·잔금은 모집공고 원문을 확인해 주세요.</p>}
+            </section>
+
+            <section className="decision-section" aria-labelledby="schedule-title">
+              <h2 id="schedule-title">청약 일정</h2>
+              <ol className="decision-timeline">
+                {schedule.map((item) => {
+                  const start = formatKstDate(item.start);
+                  const end = formatKstDate(item.end ?? item.start);
+                  return (
+                    <li key={item.id ?? `${item.kind}-${item.start}`}>
+                      <span className={`schedule-dot schedule-dot--${item.kind}`} aria-hidden="true" />
+                      <div><strong>{item.label}</strong><small>{start === end ? start : `${start} ~ ${end}`}</small></div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+
+            <section className="decision-section" aria-labelledby="supply-title">
+              <h2 id="supply-title">공급 구성</h2>
+              <div className="decision-section__triple decision-section__triple--supply">
+                <div><strong>{notice.supplyCount ?? "-"}</strong><span>총 모집</span></div>
+                <div><strong>{generalSupply ?? "-"}</strong><span>일반공급</span></div>
+                <div><strong>{specialSupply ?? "-"}</strong><span>특별공급</span></div>
+              </div>
+            </section>
+
+            <section className="decision-section" aria-labelledby="complex-title">
+              <h2 id="complex-title">단지 정보</h2>
+              <dl className="decision-info">
+                <InfoRow label="면적" value={<AreaValue areas={areas} />} />
+                <InfoRow label="주택형" value={houseTypes.length > 0 ? houseTypes.join(" · ") : "공고문 확인"} />
+                <InfoRow label="입주 예정" value={notice.moveInMonth ? <span className="detail__nowrap">{notice.moveInMonth}</span> : "공고문 확인"} />
+                <InfoRow label="시행·시공" value={[notice.businessOwnerName, decision?.constructionCompanyName].filter(Boolean).join(" · ") || "공고문 확인"} wide />
+                <InfoRow label="문의" value={notice.contactPhone ? <span className="detail__nowrap">{notice.contactPhone}</span> : "공고문 확인"} />
+                <InfoRow label="공식 접수처" value={<a href={notice.applyHomeUrl} target="_blank" rel="noreferrer">청약홈</a>} wide />
+                {notice.noticeUrl && <InfoRow label="모집공고 원문" value={<a href={notice.noticeUrl} target="_blank" rel="noreferrer">청약홈 공고문 열기</a>} wide />}
+                {notice.totalHouseholdSourceUrl && <InfoRow label="단지 규모 출처" value={<a href={notice.totalHouseholdSourceUrl} target="_blank" rel="noreferrer">공개 확인 자료 열기</a>} wide />}
+              </dl>
+            </section>
+
+            <p className="decision-card__verified">데이터 마지막 확인 <span className="detail__nowrap">{formatKstDateTime(notice.lastVerifiedAt)}</span> · 출처 청약홈</p>
+            <p className="decision-card__warning">
+              {decision?.costWarning ?? "확장비·유상옵션·취득세·중도금 이자 등은 표시된 분양가에 포함되지 않을 수 있어요. 신청 전 청약홈 원문을 꼭 확인하세요."}
+            </p>
+            <div className="decision-card__sources" aria-label="데이터 출처 구분">
+              <span>청약홈 API 구조화 값</span>
+              {decision && <span>공고문 PDF 전용 값</span>}
+              {priceSignal && <><span>국토부 실거래 외부값</span><span>청약봄 파생값</span></>}
+            </div>
+          </div>
+        )}
+      </article>
 
       {!finished && (
         <section className="alerts-card" id="alerts">
@@ -210,27 +417,15 @@ export function DetailScreen({ notices, subscriptions }: Props) {
               <span className="switch__knob" />
             </button>
           </div>
-          <p className="alerts-card__hint">
-            접수 시작일 <strong>{receiptStartLabel}</strong> 기준으로 예약합니다.
-          </p>
-          <PermissionBanner
-            compact
-            permission={permission}
-            onPermissionChange={setPermission}
-            onPermissionGranted={() => subscribe(notice)}
-          />
+          <p className="alerts-card__hint">접수 시작일 <strong>{formatKstDateTime(notice.receiptStart)}</strong> 기준으로 예약합니다.</p>
+          <PermissionBanner compact permission={permission} onPermissionChange={setPermission} onPermissionGranted={() => subscribe(notice)} />
           {subscribed && entry && (
             <>
               <div className="alerts-card__group">
-                <h3>접수 시작 <small>{receiptStartLabel}</small></h3>
+                <h3>접수 시작 <small>{formatKstDateTime(notice.receiptStart)}</small></h3>
                 <div className="alerts-card__chips">
                   {DEFAULT_OPEN_OFFSETS.map((off) => (
-                    <button
-                      key={off}
-                      className={`chip${entry.open.includes(off) ? " chip--active" : ""}`}
-                      aria-pressed={entry.open.includes(off)}
-                      onClick={() => onOffset("open", off)}
-                    >
+                    <button key={off} className={`chip${entry.open.includes(off) ? " chip--active" : ""}`} aria-pressed={entry.open.includes(off)} onClick={() => onOffset("open", off)}>
                       {off === 0 ? "접수 시각" : `${offsetLabel(off)} 전`}
                     </button>
                   ))}
@@ -240,14 +435,7 @@ export function DetailScreen({ notices, subscriptions }: Props) {
                 <h3>접수 마감</h3>
                 <div className="alerts-card__chips">
                   {DEFAULT_CLOSE_OFFSETS.map((off) => (
-                    <button
-                      key={off}
-                      className={`chip${entry.close.includes(off) ? " chip--active" : ""}`}
-                      aria-pressed={entry.close.includes(off)}
-                      onClick={() => onOffset("close", off)}
-                    >
-                      {`${offsetLabel(off)} 전`}
-                    </button>
+                    <button key={off} className={`chip${entry.close.includes(off) ? " chip--active" : ""}`} aria-pressed={entry.close.includes(off)} onClick={() => onOffset("close", off)}>{`${offsetLabel(off)} 전`}</button>
                   ))}
                 </div>
               </div>
@@ -268,26 +456,6 @@ export function DetailScreen({ notices, subscriptions }: Props) {
         </section>
       )}
 
-      <div className="detail__actions detail__actions--secondary">
-        <a className="btn btn--ghost btn--big" href={notice.applyHomeUrl} target="_blank" rel="noreferrer">
-          청약홈으로 이동
-        </a>
-        {notice.officialHomepageUrl && (
-          <a className="btn btn--ghost btn--big" href={notice.officialHomepageUrl} target="_blank" rel="noreferrer">
-            공식 홈페이지 보기
-          </a>
-        )}
-        {mapCandidates.length > 0 && (
-          <button ref={mapTriggerRef} className="btn btn--ghost btn--big" type="button" onClick={() => { setCopyStatus(""); setMapOpen(true); }}>
-            지도 검색 선택
-          </button>
-        )}
-        {notice.totalHouseholdSourceUrl && (
-          <a className="btn btn--ghost btn--big" href={notice.totalHouseholdSourceUrl} target="_blank" rel="noreferrer">
-            단지 규모 출처 보기
-          </a>
-        )}
-      </div>
       {mapOpen && (
         <div className="sheet-backdrop" role="presentation" onClick={closeMap}>
           <section ref={mapSheetRef} className="map-sheet" role="dialog" aria-modal="true" aria-labelledby="map-sheet-title" aria-describedby="map-sheet-desc" onClick={(event) => event.stopPropagation()}>
@@ -308,68 +476,8 @@ export function DetailScreen({ notices, subscriptions }: Props) {
           </section>
         </div>
       )}
-      <p className="fineprint">
-        청약 신청과 자격 확인은 청약홈 공식 사이트에서 직접 진행해야 합니다. 접수 가능 시간은 영업일
-        09:00~17:30 기준이며, 공고별 별도 조건과 정정 여부는 모집공고 원문을 확인하세요.
-      </p>
 
-      <section className="detail__table">
-        {rows
-          .filter(([, v]) => v)
-          .map(([k, v]) => (
-            <div className="detail__row" key={k}>
-              <span className="detail__key">{k}</span>
-              <span className="detail__val">{v}</span>
-            </div>
-          ))}
-      </section>
-
-      <section className="detail__schedule" aria-labelledby="detail-schedule-title">
-        <h2 id="detail-schedule-title">청약 전체 일정</h2>
-        <p>접수뿐 아니라 발표와 계약까지 한 번에 확인하세요.</p>
-        <ol>
-          {schedule.map((item) => {
-            const start = formatKstDate(item.start);
-            const end = formatKstDate(item.end ?? item.start);
-            return (
-              <li key={`${item.kind}-${item.label}-${item.start}`}>
-                <span className={`schedule-dot schedule-dot--${item.kind}`} aria-hidden="true" />
-                <div><strong>{item.label}</strong><small>{start === end ? start : `${start} ~ ${end}`}</small></div>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
-      <section className="detail__models">
-          <h2>주택형·분양가</h2>
-          <p className={`model-status model-status--${notice.modelDataStatus ?? "not-collected"}`}>{modelStatus}</p>
-          {notice.modelSummaries && notice.modelSummaries.length > 0 ? notice.modelSummaries.map((model) => {
-            const specialEntries = specialSupplyEntries(model);
-            return (
-            <div className="model-row" key={`${model.modelNo ?? ""}-${model.houseType ?? ""}`}>
-              <div>
-                <strong>{formatHouseTypeLabel(model.houseType) ?? "주택형 확인"}</strong>
-                <span>{formatArea(model.supplyArea) ? `공급면적 ${formatArea(model.supplyArea)}` : "공급면적 공고문 확인"}</span>
-              </div>
-              <div>
-                <span>
-                  {model.supplyCount != null ? `일반 ${model.supplyCount}세대` : "일반공급 확인 필요"}
-                  {model.specialSupplyCount != null ? ` · 특별 ${model.specialSupplyCount}세대` : ""}
-                </span>
-                {model.specialSupply && <ul className="model-row__special">{specialEntries.length > 0 ? specialEntries.map((item) => <li key={item.key}><span>{item.label}</span><strong>{item.count}세대</strong></li>) : <li>특별공급 세부 필드 없음</li>}</ul>}
-                <strong>{model.priceMax ? formatManwon(model.priceMax) : "금액 확인 필요"}</strong>
-              </div>
-            </div>
-          );
-          }) : <p className="model-empty">세부 주택형과 공급량은 모집공고 원문에서 확인해 주세요.</p>}
-          <p className="model-disclaimer">표시된 특별공급 세대수는 공급량이며 개인의 청약 자격을 판정하지 않습니다.</p>
-        </section>
-
-      <p className="fineprint">
-        출처: 한국부동산원 청약홈 분양정보. 정정·취소로 일정이 바뀔 수 있으니 신청 전 모집공고 원문과
-        청약홈을 함께 확인하세요.
-      </p>
+      <p className="fineprint">청약 신청과 자격 확인은 청약홈 공식 사이트에서 직접 진행해야 합니다. 정정·취소로 일정이 바뀔 수 있으니 신청 전 최신 모집공고 원문을 확인하세요.</p>
     </div>
   );
 }

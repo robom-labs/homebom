@@ -9,7 +9,7 @@ import { notificationSupport, requestPermission } from "../notify/notifications"
 const APP_VERSION = packageInfo.version;
 const CONTACT = "hello.robom@gmail.com";
 const BUILD_SHA = import.meta.env.VITE_BUILD_SHA || "local";
-const PWA_CACHE = "zzc-v19";
+const PWA_CACHE = "zzc-v20";
 
 function mailto(purpose: string): string {
   const subject = `[청약봄] ${purpose} 문의 · v${APP_VERSION}`;

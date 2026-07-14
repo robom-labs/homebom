@@ -7,6 +7,8 @@ export type {
   NoticeType,
   NoticeStatus,
   NoticeModelSummary,
+  NoticeDecisionSupport,
+  NoticePriceSignal,
 } from "./notice/types";
 export { getNoticeStatus, isClosingSoon } from "./notice/status";
 export {
