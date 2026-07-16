@@ -5,6 +5,7 @@ import {
   setAnalyticsConsent,
   trackFamilyEvent,
 } from "../familyAnalytics";
+import { version as appVersion } from "../../../package.json";
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -48,7 +49,7 @@ describe("family analytics", () => {
     expect(payload).toMatchObject({
       event_name: "notice_opened",
       app_id: "homebom",
-      app_version: "0.14.1",
+      app_version: appVersion,
       platform: "web",
       surface: "notice-detail",
       session_kind: "guest",

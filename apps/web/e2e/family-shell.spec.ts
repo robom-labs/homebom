@@ -1,5 +1,9 @@
 // 패밀리 셸의 모바일 내비·5개 앱 설정·PWA 설치 흐름을 실제 브라우저에서 검증한다.
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+
+// 릴리스마다 이 테스트를 고치지 않도록 현재 버전은 package.json에서 읽는다.
+const appVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version as string;
 
 async function openSettings(page: Page) {
   await page.route("https://homebom.test/notices", async (route) => {
@@ -34,8 +38,8 @@ test("공통 wordmark와 48px 이상 safe-area 하단 메뉴, 5개 앱 메타를
   for (const name of ["야외봄", "청약봄", "러닝봄", "캘린더봄", "자격증봄"]) {
     await expect(familySection.getByText(name, { exact: true })).toBeVisible();
   }
-  await expect(page.getByText("0.14.1", { exact: true })).toBeVisible();
-  await expect(page.getByText("zzc-v0.14.1", { exact: true })).toBeVisible();
+  await expect(page.getByText(appVersion, { exact: true })).toBeVisible();
+  await expect(page.getByText(`zzc-v${appVersion}`, { exact: true })).toBeVisible();
   await expect(page.locator(".ad-slot")).toHaveCount(0);
   expect(browserErrors).toEqual([]);
 });

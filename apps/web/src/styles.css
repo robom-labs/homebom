@@ -433,7 +433,7 @@ a { color: inherit; }
 .filters__more[open] summary { border-bottom: 1px solid var(--line); }
 .filters__more .filters__row { padding: 12px; }
 .notice-calendar__month-tabs { display: grid; grid-template-columns: repeat(2, auto); gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-muted); }
-.notice-calendar__month-tabs button { min-height: 38px; padding: 0 11px; border-radius: 11px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.notice-calendar__month-tabs button { min-height: 48px; padding: 0 13px; border-radius: 12px; color: var(--muted); font-size: 13px; font-weight: 800; }
 .notice-calendar__month-tabs button[aria-selected="true"] { color: var(--accent-deep); background: var(--surface); box-shadow: 0 2px 8px rgba(37, 83, 56, .08); }
 .notice-calendar__day { min-width: 0; padding: 4px 2px; }
 .notice-calendar__marks { width: 100%; min-width: 0; display: grid; gap: 2px; }

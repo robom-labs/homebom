@@ -1,7 +1,11 @@
 // 목록 카드가 목표 의사결정 디자인과 반응형 동작을 유지하는지 검증한다.
 import { expect, test, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+
+// 릴리스마다 이 테스트를 고치지 않도록 현재 버전은 package.json에서 읽는다.
+const appVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version as string;
 
 const HOUR = 3_600_000;
 const now = Date.now();
@@ -122,7 +126,7 @@ test("설정 안내 문구와 PWA 캐시가 정확히 한 번 표시된다", asy
   });
   await page.goto("#/settings");
   await expect(page.getByText("청약 정보는 정정될 수 있으니, 신청 전 청약홈에서 최종 내용을 한 번 더 확인해 주세요.", { exact: true })).toHaveCount(1);
-  await expect(page.getByText("zzc-v0.14.1", { exact: true })).toBeVisible();
+  await expect(page.getByText(`zzc-v${appVersion}`, { exact: true })).toBeVisible();
 });
 
 test("달력 공고 마커의 접근성 이름과 상세 알림 딥링크가 실제 동작한다", async ({ page }) => {
