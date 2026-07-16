@@ -23,10 +23,11 @@ async function collectSources(directory) {
   return nested.flat();
 }
 
-const [appConfig, easConfig, packageJson] = await Promise.all([
+const [appConfig, easConfig, packageJson, rootPackageJson] = await Promise.all([
   readJson("app.json"),
   readJson("eas.json"),
   readJson("package.json"),
+  readJson("../../package.json"),
 ]);
 
 const expo = appConfig.expo;
@@ -39,7 +40,9 @@ assert(expo.ios.bundleIdentifier === "kr.robom.homebom", "iOS bundleIdentifier�
 assert(expo.ios.associatedDomains.includes("applinks:robom.kr"), "iOS Universal Link 도메인이 필요합니다.");
 assert(expo.icon === "./assets/icon.png", "스토어용 앱 아이콘 경로가 필요합니다.");
 assert(expo.android.intentFilters.some((filter) => filter.data?.some((data) => data.scheme === "https" && data.host === "robom.kr" && data.pathPrefix === "/get/homebom")), "Android App Link 경로가 필요합니다.");
-assert(expo.version === "0.14.1" && packageJson.version === "0.14.1", "앱 버전은 0.14.1이어야 합니다.");
+assert(expo.version === packageJson.version && packageJson.version === rootPackageJson.version, "루트·네이티브 앱 버전이 일치해야 합니다.");
+assert(expo.orientation === "default", "휴대폰·태블릿 회전을 모두 지원해야 합니다.");
+assert(expo.ios.supportsTablet === true, "iPad 지원이 켜져 있어야 합니다.");
 assert(typeof expo.description === "string" && expo.description.length >= 20, "스토어 설명이 필요합니다.");
 assert(expo.platforms.length === 2 && expo.platforms.includes("android") && expo.platforms.includes("ios"), "Android와 iOS만 대상으로 해야 합니다.");
 assert(expo.plugins.some((plugin) => Array.isArray(plugin) && plugin[0] === "expo-notifications"), "expo-notifications config plugin이 필요합니다.");
