@@ -4,7 +4,7 @@
 
 ## 앱 계약
 
-- 앱 버전은 `0.14.0`이다.
+- 앱 버전은 `0.14.1`이다.
 - Android application ID와 iOS bundle identifier는 모두 `kr.robom.homebom`이다.
 - custom scheme은 `homebom`이다.
 - 샘플 공고 안정 ID는 웹 도메인 규칙과 같은 `HOUSE_MANAGE_NO-PBLANC_NO` 형식의 `2026000001-1`이다.

@@ -48,7 +48,7 @@ describe("family analytics", () => {
     expect(payload).toMatchObject({
       event_name: "notice_opened",
       app_id: "homebom",
-      app_version: "0.14.0",
+      app_version: "0.14.1",
       platform: "web",
       surface: "notice-detail",
       session_kind: "guest",

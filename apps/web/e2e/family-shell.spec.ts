@@ -34,8 +34,8 @@ test("공통 wordmark와 48px 이상 safe-area 하단 메뉴, 5개 앱 메타를
   for (const name of ["야외봄", "청약봄", "러닝봄", "캘린더봄", "자격증봄"]) {
     await expect(familySection.getByText(name, { exact: true })).toBeVisible();
   }
-  await expect(page.getByText("0.14.0", { exact: true })).toBeVisible();
-  await expect(page.getByText("zzc-v0.14.0", { exact: true })).toBeVisible();
+  await expect(page.getByText("0.14.1", { exact: true })).toBeVisible();
+  await expect(page.getByText("zzc-v0.14.1", { exact: true })).toBeVisible();
   await expect(page.locator(".ad-slot")).toHaveCount(0);
   expect(browserErrors).toEqual([]);
 });
