@@ -40,7 +40,7 @@ export function buildNoticeAlerts(
   now: number,
 ): NoticeAlert[] {
   if (kind === "event") return [];
-  if (notice.cancelled || Date.parse(notice.receiptEnd) < now) return [];
+  if (notice.cancelled || notice.missingFromFeed || Date.parse(notice.receiptEnd) < now) return [];
   const receiptEvent = notice.events?.find((event) => ["receipt", "special", "rank1", "rank2", "no-priority"].includes(event.kind));
   const confirmed = kind === "open" ? receiptEvent?.startTimeConfirmed === true : receiptEvent?.endTimeConfirmed === true;
   if (!confirmed) return [];
@@ -78,7 +78,7 @@ export function buildEventAlerts(
   now: number,
   offsetsMinutes = [1440, 60],
 ): NoticeAlert[] {
-  if (notice.cancelled || Date.parse(notice.receiptEnd) < now) return [];
+  if (notice.cancelled || notice.missingFromFeed || Date.parse(notice.receiptEnd) < now) return [];
   return events.filter((event) => event.startTimeConfirmed === true).flatMap((event) => offsetsMinutes.map((off) => ({
     id: `${event.id ?? `${notice.id}:${event.kind}`}:event:${off}`,
     noticeId: notice.id,

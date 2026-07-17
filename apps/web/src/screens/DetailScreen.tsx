@@ -284,6 +284,14 @@ export function DetailScreen({ notices, subscriptions, loading, error }: Props) 
       {status === "취소" && (
         <div className="notice-bar">이 공고는 취소되었습니다. 청약홈에서 취소 공고를 확인하세요.</div>
       )}
+      {status !== "취소" && notice.missingFromFeed && (
+        <div className="notice-bar" role="status">
+          이 공고가 청약홈 목록에서 내려갔어요. 취소·정정 가능성이 있어 알림을 멈췄습니다. 청약홈 원문을 확인하세요.
+          {subscribed && (
+            <button type="button" className="notice-bar__action" onClick={() => unsubscribe(notice.id)}>알림 정리</button>
+          )}
+        </div>
+      )}
       {notice.corrected && !finished && (
         <div className="notice-bar">정정 공고가 있었던 건입니다. 신청 전 최신 청약홈 원문을 확인하세요.</div>
       )}

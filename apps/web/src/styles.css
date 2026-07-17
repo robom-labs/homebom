@@ -89,6 +89,7 @@ a { color: inherit; }
 .source--not-connected { color: var(--danger); background: var(--danger-soft); }
 
 .notice-bar { margin: 0 0 14px; padding: 13px 15px; border-radius: 15px; background: var(--danger-soft); color: var(--danger); font-size: 14px; font-weight: 700; }
+.notice-bar__action { display: inline-flex; min-height: 40px; align-items: center; margin-left: 10px; padding: 0 14px; border: 1px solid currentColor; border-radius: 12px; background: transparent; color: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
 .notice-bar--muted { margin-top: 18px; color: var(--muted); background: var(--surface-muted); font-weight: 500; }
 .notice-bar--stale { color: #6f4b00; background: #fff5d8; }
 

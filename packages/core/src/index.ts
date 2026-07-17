@@ -16,6 +16,8 @@ export type {
 export { parseNoticeList, safeParseNotice } from "./notice/schema";
 export type { NoticeListParseResult, NoticeParseIssue } from "./notice/schema";
 export { getNoticeStatus, isClosingSoon } from "./notice/status";
+export { markSnapshotsMissingFromFeed } from "./notice/snapshotSync";
+export type { SnapshotFeedSyncResult } from "./notice/snapshotSync";
 export {
   normalizeRemndrItem,
   normalizeRemndrItems,

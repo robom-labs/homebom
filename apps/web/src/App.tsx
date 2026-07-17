@@ -17,8 +17,9 @@ export default function App() {
   const { noticeSnapshots, subs, syncNoticeSnapshots } = subscriptions;
 
   useEffect(() => {
-    syncNoticeSnapshots(notices);
-  }, [notices, syncNoticeSnapshots]);
+    // live 응답일 때만 "피드에서 내려간 공고" 대조로 취소 후보를 표시한다(stale/에러는 오탐 방지).
+    syncNoticeSnapshots(notices, source === "live");
+  }, [notices, source, syncNoticeSnapshots]);
 
   const stateRef = useRef({
     notices,

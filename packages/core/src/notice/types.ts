@@ -165,6 +165,8 @@ export type Notice = {
   corrected?: boolean;
   /** 취소공고 여부. */
   cancelled?: boolean;
+  /** 활성 피드에서 사라졌지만 접수 종료 전인 구독 스냅샷 표시(취소·정정 후보). 알림을 멈춘다. */
+  missingFromFeed?: boolean;
   /** 청약홈 이동 URL. 모집공고 원문 URL과 혼동하지 않는다. */
   applyHomeUrl: string;
   /** 모집공고 원문 URL. */

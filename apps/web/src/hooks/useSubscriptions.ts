@@ -1,6 +1,6 @@
 // 공고별 알림 구독 상태를 관리하고 localStorage에 저장하는 훅.
 import { useCallback, useState } from "react";
-import { DEFAULT_CLOSE_OFFSETS, DEFAULT_OPEN_OFFSETS } from "@zoopzoopcall/core";
+import { DEFAULT_CLOSE_OFFSETS, DEFAULT_OPEN_OFFSETS, markSnapshotsMissingFromFeed } from "@zoopzoopcall/core";
 import type { AlertKind, Notice } from "@zoopzoopcall/core";
 import type { NoticeSnapshotMap, SubMap } from "../store/subscriptions";
 import {
@@ -55,18 +55,27 @@ export function useSubscriptions() {
   );
 
   const syncNoticeSnapshots = useCallback(
-    (notices: Notice[]) => {
+    // feedIsLive: 완전한 활성 목록(live)일 때만 "피드에서 내려간 공고" 취소 후보 처리를 한다.
+    // stale·에러 응답에서는 멀쩡한 공고를 취소로 오탐하지 않도록 대조를 건너뛴다.
+    (notices: Notice[], feedIsLive = false) => {
       const migrated = migrateLegacyNoticeKeys(notices, subs, noticeSnapshots);
       if (migrated.changed) update(migrated.subs);
-      const next = { ...migrated.snapshots };
-      let changed = false;
+      let next = { ...migrated.snapshots };
+      let changed = migrated.changed;
       for (const notice of notices) {
         if (notice.id in migrated.subs && JSON.stringify(next[notice.id]) !== JSON.stringify(notice)) {
           next[notice.id] = notice;
           changed = true;
         }
       }
-      if (migrated.changed || changed) updateNoticeSnapshots(next);
+      if (feedIsLive) {
+        const reconciled = markSnapshotsMissingFromFeed(notices, next);
+        if (reconciled.changed) {
+          next = reconciled.snapshots;
+          changed = true;
+        }
+      }
+      if (changed) updateNoticeSnapshots(next);
     },
     [noticeSnapshots, subs, update, updateNoticeSnapshots],
   );

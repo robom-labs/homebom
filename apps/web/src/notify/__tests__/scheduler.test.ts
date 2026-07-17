@@ -127,3 +127,27 @@ describe("nextAlertWakeDelay", () => {
     expect(nextAlertWakeDelay([], now)).toBeNull();
   });
 });
+
+describe("피드에서 내려간 공고(missingFromFeed) 알림 억제", () => {
+  it("missingFromFeed 스냅샷은 예정 알림에서 제외한다", () => {
+    // 접수 시작 전(미래)이라 원래라면 시작 알림이 잡히는 공고
+    const future = makeNotice({
+      id: "N-missing",
+      receiptStart: "2999-01-01T00:00:00.000Z",
+      receiptEnd: "2999-01-02T00:00:00.000Z",
+      events: [{
+        kind: "no-priority", label: "접수",
+        start: "2999-01-01T00:00:00.000Z", end: "2999-01-02T00:00:00.000Z",
+        timeSource: "official", startTimeConfirmed: true, endTimeConfirmed: true, confirmed: true,
+      }],
+    });
+    const subs: SubMap = { "N-missing": { open: [0], close: [0], eventIds: [] } };
+    const now = T("2026-07-01T00:00:00.000Z");
+    // 피드에는 없고 스냅샷만 있는 상태
+    const liveSnap: NoticeSnapshotMap = { "N-missing": future };
+    expect(collectPendingAlerts([], subs, now, liveSnap).length).toBeGreaterThan(0);
+    // missingFromFeed 표시되면 알림이 사라진다
+    const flagged: NoticeSnapshotMap = { "N-missing": { ...future, missingFromFeed: true } };
+    expect(collectPendingAlerts([], subs, now, flagged)).toEqual([]);
+  });
+});

@@ -33,7 +33,7 @@ export function collectPendingAlerts(
   const out: NoticeAlert[] = [];
   for (const [noticeId, entry] of Object.entries(subs)) {
     const notice = byId.get(noticeId);
-    if (!notice || notice.cancelled) continue;
+    if (!notice || notice.cancelled || notice.missingFromFeed) continue;
     out.push(...buildNoticeAlerts(notice, "open", entry.open, now));
     out.push(...buildNoticeAlerts(notice, "close", entry.close, now));
     if (entry.eventIds?.length) {

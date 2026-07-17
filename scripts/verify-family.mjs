@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-const PINNED_SOURCE_COMMIT = "b592076e683ce3f3094b1399ceee7ca93e014eaa";
+const PINNED_SOURCE_COMMIT = "942194ec386b2682f14b304e45a2bb3e8a49f287";
 const REQUIRED_FILES = [
   "analytics-events.ts",
   "app-meta.json",
