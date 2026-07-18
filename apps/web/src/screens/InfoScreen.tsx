@@ -251,7 +251,7 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
 
       <section className="settings-card" aria-labelledby="family-apps">
         <CardHead icon={IC.house} title="로봄 패밀리 앱 5개" id="family-apps" />
-        {familyMeta.familyApps.map((app) => (
+        {familyMeta.familyApps.filter((app) => app.id !== "homebom").map((app) => (
           <SettingsRow
             key={app.id}
             href={app.installUrl}
