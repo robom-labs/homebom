@@ -1,5 +1,12 @@
 // 알림 구독과 발송 이력을 localStorage에 보관하는 저장소.
-import { safeParseNotice, type Notice } from "@zoopzoopcall/core";
+import { latestNoticeAlertDate, safeParseNotice, type Notice } from "@zoopzoopcall/core";
+
+// 구독 공고 스냅샷은 마지막 관련 일정(발표·계약 포함) 다음 날까지 보존한다.
+// receiptEnd만으로 정리하면 발표·계약 알림이 울리기 전에 공고가 사라진다.
+const SNAPSHOT_RETAIN_GRACE_MS = 86_400_000;
+function shouldRetainSnapshot(notice: Notice): boolean {
+  return notice.cancelled !== true && latestNoticeAlertDate(notice) + SNAPSHOT_RETAIN_GRACE_MS >= Date.now();
+}
 
 export type SubEntry = { open: number[]; close: number[]; eventIds?: string[] };
 export type SubMap = Record<string, SubEntry>;
@@ -46,7 +53,7 @@ export function loadNoticeSnapshots(): NoticeSnapshotMap {
   const stored = readJson<NoticeSnapshotMap>(NOTICE_SNAPSHOTS_KEY, {});
   const active = Object.fromEntries(Object.entries(stored).filter(([, value]) => {
     const parsed = safeParseNotice(value);
-    return parsed.success && parsed.data.cancelled !== true && Date.parse(parsed.data.receiptEnd) >= Date.now();
+    return parsed.success && shouldRetainSnapshot(parsed.data);
   }));
   if (Object.keys(active).length !== Object.keys(stored).length) writeJson(NOTICE_SNAPSHOTS_KEY, active);
   return active;
@@ -55,7 +62,7 @@ export function loadNoticeSnapshots(): NoticeSnapshotMap {
 export function saveNoticeSnapshots(notices: NoticeSnapshotMap): void {
   const active = Object.fromEntries(Object.entries(notices).filter(([, notice]) => {
     const parsed = safeParseNotice(notice);
-    return parsed.success && parsed.data.cancelled !== true && Date.parse(parsed.data.receiptEnd) >= Date.now();
+    return parsed.success && shouldRetainSnapshot(parsed.data);
   }));
   writeJson(NOTICE_SNAPSHOTS_KEY, active);
 }

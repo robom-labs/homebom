@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildNoticeAlerts,
   buildEventAlerts,
+  latestNoticeAlertDate,
   DEFAULT_CLOSE_OFFSETS,
   DEFAULT_OPEN_OFFSETS,
   offsetLabel,
@@ -58,6 +59,40 @@ describe("buildEventAlerts", () => {
       `${notice.id}:SPSPLY_RCEPT_BGNDE:event:60`,
     ]);
     expect(alerts.every((item) => item.kind === "event")).toBe(true);
+  });
+
+  it("접수 마감 이후인 발표·계약 리마인더도 예약한다 (receiptEnd로 막지 않는다)", () => {
+    // receiptEnd(7/10)는 이미 지났지만 발표일은 8/5로 미래다.
+    const now = T("2026-07-20T00:00:00Z");
+    const winner = [{
+      id: `${notice.id}:PRZWNER_PRESNATN_DE`,
+      noticeId: notice.id,
+      kind: "winner" as const,
+      label: "당첨자 발표",
+      start: "2026-08-05T00:00:00.000Z", // KST 8/5
+      end: "2026-08-05T00:00:00.000Z",
+      timeSource: "date-only" as const,
+      startTimeConfirmed: false,
+      endTimeConfirmed: false,
+      confirmed: false,
+      sourceField: "PRZWNER_PRESNATN_DE",
+    }];
+    const alerts = buildEventAlerts(notice, winner, now);
+    // 전일·당일 09:00 KST 리마인더 2건이 남아야 한다.
+    expect(alerts.map((a) => a.id)).toEqual([
+      `${notice.id}:PRZWNER_PRESNATN_DE:event:1440`,
+      `${notice.id}:PRZWNER_PRESNATN_DE:event:0`,
+    ]);
+    expect(alerts.every((a) => a.fireAt > now)).toBe(true);
+  });
+});
+
+describe("latestNoticeAlertDate", () => {
+  it("발표·계약을 포함한 가장 늦은 관련 날짜를 반환한다", () => {
+    const withDates: Notice = { ...notice, winnerDate: "2026-08-05", contractEndDate: "2026-08-20" };
+    expect(latestNoticeAlertDate(withDates)).toBe(Date.parse("2026-08-20"));
+    // 마감(7/10)보다 발표(8/5)가 늦으면 발표일을 반환한다.
+    expect(latestNoticeAlertDate({ ...notice, winnerDate: "2026-08-05" })).toBe(Date.parse("2026-08-05"));
   });
 });
 

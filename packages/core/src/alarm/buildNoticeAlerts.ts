@@ -94,7 +94,10 @@ export function buildEventAlerts(
   now: number,
   offsetsMinutes = [1440, 60],
 ): NoticeAlert[] {
-  if (notice.cancelled || notice.missingFromFeed || Date.parse(notice.receiptEnd) < now) return [];
+  // 발표·계약 같은 세부 일정은 본질적으로 접수 마감(receiptEnd) 이후에 온다.
+  // 여기서 receiptEnd로 막으면 그 리마인더가 영영 예약되지 않으므로 막지 않고,
+  // 아래 `fireAt > now` 필터로 과거 알림만 제외한다(취소·피드 이탈만 차단).
+  if (notice.cancelled || notice.missingFromFeed) return [];
   return events.flatMap((event) => {
     const base = event.id ?? `${notice.id}:${event.kind}`;
     if (event.startTimeConfirmed === true) {
@@ -121,4 +124,28 @@ export function buildEventAlerts(
       url: notice.noticeUrl ?? notice.applyHomeUrl,
     }));
   }).filter((alert) => alert.fireAt > now);
+}
+
+/**
+ * 이 공고와 관련해 알림이 울릴 수 있는 가장 늦은 날짜(UTC ms).
+ * 구독 스냅샷을 언제까지 보존할지 결정하는 데 쓴다. 발표·계약이 접수 마감보다
+ * 늦으므로 receiptEnd만으로 정리하면 그 알림 전에 공고가 사라진다.
+ */
+export function latestNoticeAlertDate(notice: Notice): number {
+  const candidates: Array<string | undefined> = [
+    notice.receiptEnd,
+    notice.winnerDate,
+    notice.contractStartDate,
+    notice.contractEndDate,
+  ];
+  for (const event of notice.events ?? []) {
+    candidates.push(event.end, event.start);
+  }
+  let latest = 0;
+  for (const value of candidates) {
+    if (!value) continue;
+    const ms = Date.parse(value);
+    if (Number.isFinite(ms) && ms > latest) latest = ms;
+  }
+  return latest;
 }

@@ -58,6 +58,7 @@ export {
 export {
   buildNoticeAlerts,
   buildEventAlerts,
+  latestNoticeAlertDate,
   offsetLabel,
   DEFAULT_OPEN_OFFSETS,
   DEFAULT_CLOSE_OFFSETS,

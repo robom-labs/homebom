@@ -4,14 +4,14 @@
   "name": "청약봄",
   "englishName": "HomeBom",
   "repo": "robom-labs/homebom",
-  "version": "0.14.5",
+  "version": "0.14.6",
   "webUrl": "https://robom-labs.github.io/homebom/",
   "stableInstallUrl": "https://robom.kr/get/homebom",
   "privacyUrl": "https://robom.kr/privacy/homebom",
   "supportUrl": "https://robom.kr/support",
   "deployProvider": "github-pages",
   "familySpecVersion": "1.0.0",
-  "lastVerifiedAt": "2026-07-17T22:12:00+09:00",
+  "lastVerifiedAt": "2026-07-18T14:14:02+09:00",
   "familyApps": [
     {
       "id": "outbom",

@@ -494,9 +494,9 @@ export function DetailScreen({ notices, subscriptions, loading, error }: Props) 
               </div>
               <p className="fineprint">이미 지난 시각의 알림은 예약되지 않아요.</p>
               <div className="alerts-card__group">
-                <h3>세부 일정 <small>선택한 일정은 하루 전과 한 시간 전에 알려드려요.</small></h3>
+                <h3>세부 일정 <small>선택한 일정을 미리 알려드려요. 시각이 정해지지 않은 발표·계약은 전날·당일 오전 9시에 알림이 와요.</small></h3>
                 <div className="event-alerts">
-                  {schedule.filter((item) => item.id && item.startTimeConfirmed === true && ["special", "rank1", "rank2", "no-priority", "winner", "contract"].includes(item.kind)).map((item) => (
+                  {schedule.filter((item) => item.id && ["special", "rank1", "rank2", "no-priority", "winner", "contract"].includes(item.kind)).map((item) => (
                     <label key={item.id}>
                       <input type="checkbox" checked={entry.eventIds?.includes(item.id!) ?? false} onChange={() => subscriptions.toggleEvent(notice.id, item.id!)} />
                       <span><strong>{item.label}</strong><small>{formatKstDate(item.start)}</small></span>
