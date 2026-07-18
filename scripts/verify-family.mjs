@@ -61,8 +61,8 @@ const [appMeta, featureFlags, authConfig, packageInfo] = await Promise.all([
 if (appMeta.id !== "homebom" || appMeta.version !== packageInfo.version) {
   throw new Error(`중앙 registry app-meta drift: app-meta=${appMeta.version ?? "없음"}, package=${packageInfo.version ?? "없음"}`);
 }
-if (appMeta.familyApps?.length !== 5) {
-  throw new Error("app-meta.json에 패밀리 앱 5개가 모두 포함되지 않았습니다.");
+if (appMeta.familyApps?.length !== 6) {
+  throw new Error("app-meta.json에 패밀리 앱 6개가 모두 포함되지 않았습니다.");
 }
 if (featureFlags.ads?.enabled !== false || featureFlags.analytics?.enabled !== false) {
   throw new Error("feature-flags.json의 광고·분석 기본값은 비활성이어야 합니다.");

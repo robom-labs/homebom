@@ -35,7 +35,7 @@ test("공통 wordmark와 48px 이상 safe-area 하단 메뉴, 5개 앱 메타를
 
   const familySection = page.getByRole("region", { name: "로봄 패밀리 앱 5개" });
   await expect(familySection.getByRole("link")).toHaveCount(5);
-  for (const name of ["야외봄", "청약봄", "러닝봄", "캘린더봄", "자격증봄"]) {
+  for (const name of ["야외봄", "러닝봄", "캘린더봄", "자격증봄", "노트봄"]) {
     await expect(familySection.getByText(name, { exact: true })).toBeVisible();
   }
   await expect(page.getByText(appVersion, { exact: true })).toBeVisible();
