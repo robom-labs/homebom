@@ -2,7 +2,7 @@
   "expo": {
     "name": "청약봄",
     "slug": "homebom",
-    "version": "0.14.7",
+    "version": "0.14.8",
     "description": "공식 청약 공고의 접수·발표·계약 다음 행동을 확인하고 관심 일정 알림을 준비하는 청약봄",
     "platforms": [
       "ios",
