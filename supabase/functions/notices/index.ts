@@ -143,7 +143,7 @@ function headers(status = 200, extra: Record<string, string> = {}): ResponseInit
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
-      "access-control-expose-headers": "x-data-stale, x-verified-at",
+      "access-control-expose-headers": "x-data-stale, x-verified-at, x-collection-stats",
       ...extra,
     },
   };
@@ -1162,9 +1162,27 @@ Deno.serve(async (req) => {
 
     const body = JSON.stringify(notices);
     cache = { at: Date.now(), body, verifiedAt };
+    // HQ 수집 헬스 머신검증용: 숫자만 담는 읽기전용 헤더. 공고 본문·PII는 절대 넣지 않는다.
+    // 불변식: fetched >= valid >= published >= 0, 모두 유한 음이 아닌 정수.
+    // 카운트 계산이 실패해도 항상 well-formed JSON 이 되도록 방어적으로 폴백한다.
+    let collectionStats: string;
+    try {
+      const published = notices.length;
+      // 업스트림에서 가져온 상세 행 수(무순위/잔여 + APT). notices 는 이 중 유효분을 필터한 부분집합이다.
+      const fetched = remndrDetails.length + aptDetails.length;
+      // normalize/validation 을 통과한 수 = null 제거 후 = 정렬 후와 동일 = published.
+      const valid = published;
+      // 이 응답은 새로 수집한 결과이므로 last-known-good 에서 보존한 항목은 없다.
+      const preserved = 0;
+      collectionStats = JSON.stringify({ published, fetched, valid, preserved });
+    } catch {
+      const n = Array.isArray(notices) ? notices.length : 0;
+      collectionStats = JSON.stringify({ published: n, fetched: n, valid: n, preserved: 0 });
+    }
     return new Response(body, headers(200, {
       "cache-control": "public, max-age=60, stale-while-revalidate=300",
       "x-verified-at": verifiedAt,
+      "x-collection-stats": collectionStats,
     }));
   } catch (err) {
     if (isQuotaError(err)) {
