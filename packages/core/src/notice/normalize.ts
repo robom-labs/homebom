@@ -1,11 +1,15 @@
 // 청약홈 API(15098547) 원시 응답을 Notice로 정규화하는 순수함수.
+// 확장자를 붙인 이유: 이 파일은 supabase/functions/notices(Deno 런타임)가 상대경로로
+// 직접 import하는 단일 소스다. Deno는 로컬 상대 import에 확장자가 없으면 해석에 실패한다
+// (Node/Vite의 "bundler" 해석과 다름). 확장자를 붙여도 tsc(bundler resolution)·Vite·Vitest
+// 쪽 해석에는 영향이 없다.
 import type {
   ApplicationEvent,
   ApplicationRegionScope,
   Notice,
   NoticeModelSummary,
   NoticeType,
-} from "./types";
+} from "./types.ts";
 
 /**
  * getRemndrLttotPblancDetail 응답 아이템.

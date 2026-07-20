@@ -1,6 +1,26 @@
 // 청약홈 분양정보 API를 고객용 Notice JSON으로 정규화하는 Edge Function.
 // 배포: supabase functions deploy notices --no-verify-jwt
 // 환경변수: supabase secrets set DATA_GO_KR_SERVICE_KEY=...
+//
+// 공고 정규화(날짜·URL·ID·일정·주택형)의 단일 소스는 packages/core/src/notice/normalize.ts다.
+// Deno는 Node와 모듈 해석 규칙이 달라 패키지 이름(@zoopzoopcall/core)으로는 import할 수 없지만,
+// normalize.ts 자신은 타입 전용 import만 가지고 있어(런타임에 지워짐) 상대 경로 + 확장자 import로
+// deno run에서 그대로 로드·실행됨을 확인했다. index.ts 전체를 import하면(값 export가 확장자 없는
+// 상대 경로를 쓰는 것들이 있어) Deno가 모듈을 찾지 못하니, 반드시 normalize.ts를 직접 가리켜야 한다.
+import {
+  buildAptEvents,
+  buildNoticeIdentity,
+  buildRemndrEvents,
+  kstDateToUtcIso,
+  normalizeExternalUrl,
+  normalizeRemndrModels,
+  normalizeYmd,
+  resolveNoticeType,
+  type RawAptItem,
+  type RawRemndrItem,
+  type RawRemndrModelItem,
+} from "../../../packages/core/src/notice/normalize.ts";
+import type { ApplicationEvent as CoreApplicationEvent } from "../../../packages/core/src/notice/types.ts";
 
 const API_BASE = "https://api.odcloud.kr/api/ApplyhomeInfoDetailSvc/v1";
 const REMNDR_DETAIL_OPERATION = "getRemndrLttotPblancDetail";
@@ -29,20 +49,8 @@ const RECEIPT_NOTE =
 type RawItem = Record<string, unknown>;
 type ApiPage = { data?: RawItem[]; totalCount?: number; currentCount?: number; error?: string };
 type SourceKind = "remndr" | "apt";
-type ApplicationEvent = {
-  id?: string;
-  noticeId?: string;
-  kind: "announce" | "receipt" | "special" | "rank1" | "rank2" | "no-priority" | "winner" | "contract";
-  label: string;
-  start: string;
-  end?: string;
-  regionScope?: "local" | "gyeonggi" | "other" | "all" | "not-applicable";
-  confirmed?: boolean;
-  timeSource?: "official" | "date-only" | "reference-rule";
-  startTimeConfirmed?: boolean;
-  endTimeConfirmed?: boolean;
-  sourceField?: string;
-};
+// core의 ApplicationEvent와 동일 타입(단일 소스). 이름만 로컬 별칭으로 유지한다.
+type ApplicationEvent = CoreApplicationEvent;
 type ModelCacheRow = { notice_key: string; models: RawItem[]; fetched_at: string; retry_after?: string | null };
 type LocationCacheRow = {
   notice_key: string;
@@ -173,23 +181,6 @@ function isRateLimited(ip: string, now: number): boolean {
   return bucket.count > RATE_LIMIT_MAX;
 }
 
-function kstDateToUtcIso(dateYmd: string, timeHm: string): string {
-  return new Date(`${dateYmd}T${timeHm}:00+09:00`).toISOString();
-}
-
-// core/normalize.ts의 normalizeYmd와 동일 규칙. 두 파일 결과가 어긋나지 않게 함께 유지한다.
-function normalizeYmd(value: unknown): string | null {
-  const raw = String(value ?? "").trim();
-  const match = raw.match(/^(\d{4})-?(\d{2})-?(\d{2})$/);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const utc = new Date(Date.UTC(year, month - 1, day));
-  if (utc.getUTCFullYear() !== year || utc.getUTCMonth() !== month - 1 || utc.getUTCDate() !== day) return null;
-  return `${match[1]}-${match[2]}-${match[3]}`;
-}
-
 function text(value: unknown): string | undefined {
   const out = String(value ?? "").trim();
   return out || undefined;
@@ -212,64 +203,10 @@ function sameRegion(expected?: string, actual?: string): boolean {
   return a.startsWith(b.slice(0, 2)) || b.startsWith(a.slice(0, 2));
 }
 
-// 청약홈 공공데이터 API는 PBLANC_URL의 `&`를 `&amp;`로 XML 이스케이프해 반환한다.
-// 이 상태로 링크를 열면 `?houseManageNo=…&amp;pblancNo=…`가 되어 청약홈이 공고를
-// 특정하지 못하고 404를 낸다. URL 파싱 전에 HTML 엔티티를 되돌린다.
-function decodeHtmlEntities(input: string): string {
-  return input
-    .replace(/&amp;/gi, "&")
-    .replace(/&#0*38;/g, "&")
-    .replace(/&#x0*26;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0*39;/g, "'")
-    .replace(/&apos;/gi, "'");
-}
-
-function urlText(value: unknown): string | undefined {
-  const out = text(value);
-  if (!out) return undefined;
-  if (/[\u0000-\u001F\u007F]/.test(out)) return undefined;
-  const decoded = decodeHtmlEntities(out);
-  const candidate = /^www\./i.test(decoded) ? `https://${decoded}` : decoded;
-  try {
-    const url = new URL(candidate);
-    if (!url.hostname || (url.protocol !== "https:" && url.protocol !== "http:")) return undefined;
-    return url.toString();
-  } catch {
-    return undefined;
-  }
-}
-
-function stableIdPart(value: string): string {
-  return value
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^0-9a-z가-힣_-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-function noticeIdentity(raw: RawItem, houseName: string, receiptStartYmd: string) {
-  const manageNo = String(raw.HOUSE_MANAGE_NO ?? "").trim();
-  const pblancNo = String(raw.PBLANC_NO ?? "").trim();
-  const legacyId = `${manageNo}-${pblancNo}`;
-  if (manageNo && pblancNo) return { id: legacyId, legacyIds: undefined, manageNo, pblancNo };
-  const id = manageNo
-    ? `manage-${stableIdPart(manageNo)}-${receiptStartYmd}`
-    : pblancNo
-      ? `pblanc-${stableIdPart(pblancNo)}-${receiptStartYmd}`
-      : `notice-${stableIdPart(houseName)}-${normalizeYmd(raw.RCRIT_PBLANC_DE) ?? receiptStartYmd}-${receiptStartYmd}`;
-  return { id, legacyIds: legacyId ? [legacyId] : undefined, manageNo, pblancNo };
-}
-
-function positiveNumber(value: unknown): number | undefined {
-  const normalized = String(value ?? "").replace(/,/g, "").trim();
-  const num = Number(normalized);
-  return Number.isFinite(num) && num > 0 ? num : undefined;
-}
+// urlText·noticeIdentity는 core/normalize.ts의 normalizeExternalUrl·buildNoticeIdentity를
+// 그대로 쓴다(위 import 참고). 호출부를 그대로 두려고 이 파일 기존 이름으로 별칭만 둔다.
+const urlText = normalizeExternalUrl;
+const noticeIdentity = buildNoticeIdentity;
 
 function nonNegativeNumber(value: unknown): number | undefined {
   const normalized = String(value ?? "").replace(/,/g, "").trim();
@@ -370,106 +307,24 @@ async function fetchAll(
   return [first, ...rest].flatMap((page) => page.data ?? []);
 }
 
-function resolveType(raw: RawItem): "무순위" | "잔여세대" | "불법행위 재공급" {
-  if (raw.HOUSE_SECD === "06") return "불법행위 재공급";
-  const name = `${raw.HOUSE_SECD_NM ?? ""}${raw.HOUSE_NM ?? ""}`;
-  if (name.includes("잔여")) return "잔여세대";
-  return "무순위";
-}
+// resolveType은 core/normalize.ts의 resolveNoticeType과 동일 로직(단일 소스)이다.
+const resolveType = resolveNoticeType;
 
 function modelKey(raw: RawItem): string {
   return `${raw.HOUSE_MANAGE_NO ?? ""}-${raw.PBLANC_NO ?? ""}`;
 }
 
-function normalizeModels(items: RawItem[]) {
-  return items.map((raw) => ({
-    modelNo: text(raw.MODEL_NO),
-    houseType: text(raw.HOUSE_TY),
-    supplyArea: text(raw.SUPLY_AR),
-    supplyCount: nonNegativeNumber(raw.SUPLY_HSHLDCO),
-    specialSupplyCount: nonNegativeNumber(raw.SPSPLY_HSHLDCO),
-    specialSupply: {
-      multiChild: nonNegativeNumber(raw.MNYCH_HSHLDCO),
-      newlywed: nonNegativeNumber(raw.NWWDS_HSHLDCO),
-      firstLife: nonNegativeNumber(raw.LFE_FRST_HSHLDCO),
-      oldParent: nonNegativeNumber(raw.OLD_PARNTS_SUPORT_HSHLDCO),
-      institution: nonNegativeNumber(raw.INSTT_RECOMEND_HSHLDCO),
-      other: nonNegativeNumber(raw.ETC_HSHLDCO),
-      transferInstitution: nonNegativeNumber(raw.TRANSR_INSTT_ENFSN_HSHLDCO),
-      youth: nonNegativeNumber(raw.YGMN_HSHLDCO),
-      newborn: nonNegativeNumber(raw.NWBB_HSHLDCO),
-    },
-    priceMax: positiveNumber(raw.LTTOT_TOP_AMOUNT),
-  }));
-}
+// normalizeModels는 core/normalize.ts의 normalizeRemndrModels와 동일 로직(단일 소스)이다.
+const normalizeModels = normalizeRemndrModels;
 
-function event(
-  kind: ApplicationEvent["kind"],
-  label: string,
-  startValue: unknown,
-  endValue?: unknown,
-  startTime = "09:00",
-  endTime = "17:30",
-  sourceField = "",
-  regionScope: ApplicationEvent["regionScope"] = "not-applicable",
-): ApplicationEvent | null {
-  const start = normalizeYmd(startValue);
-  if (!start) return null;
-  const end = normalizeYmd(endValue) ?? start;
-  return {
-    kind,
-    label,
-    start: kstDateToUtcIso(start, startTime),
-    end: kstDateToUtcIso(end, endTime),
-    sourceField,
-    regionScope,
-    timeSource: "date-only",
-    startTimeConfirmed: false,
-    endTimeConfirmed: false,
-    confirmed: false,
-  };
-}
-
-function eventPriority(item: ApplicationEvent): number {
-  const region = { local: 0, gyeonggi: 1, other: 2, all: 3, "not-applicable": 4 }[item.regionScope ?? "not-applicable"];
-  if (item.kind === "special") return 10;
-  if (item.kind === "rank1") return 20 + region;
-  if (item.kind === "rank2") return 30 + region;
-  if (item.kind === "no-priority") return 40;
-  if (item.kind === "receipt") return 50;
-  if (item.kind === "winner") return 60;
-  if (item.kind === "contract") return 70;
-  return 80;
-}
-
-function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
-  let candidates: Array<ApplicationEvent | null> = [
-    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59", "RCRIT_PBLANC_DE"),
-    kind === "remndr"
-      ? event("no-priority", "무순위·잔여 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE, "00:00", "23:59", "SUBSCRPT_RCEPT_BGNDE", "all")
-      : event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE, "00:00", "23:59", "RCEPT_BGNDE", "all"),
-    kind === "apt" ? event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE, "00:00", "23:59", "SPSPLY_RCEPT_BGNDE", "all") : null,
-    kind === "apt" ? event("rank1", "1순위 해당지역", raw.GNRL_RNK1_CRSPAREA_RCPTDE, raw.GNRL_RNK1_CRSPAREA_ENDDE, "00:00", "23:59", "GNRL_RNK1_CRSPAREA_RCPTDE", "local") : null,
-    kind === "apt" ? event("rank1", "1순위 경기지역", raw.GNRL_RNK1_ETC_GG_RCPTDE, raw.GNRL_RNK1_ETC_GG_ENDDE, "00:00", "23:59", "GNRL_RNK1_ETC_GG_RCPTDE", "gyeonggi") : null,
-    kind === "apt" ? event("rank1", "1순위 기타지역", raw.GNRL_RNK1_ETC_AREA_RCPTDE, raw.GNRL_RNK1_ETC_AREA_ENDDE, "00:00", "23:59", "GNRL_RNK1_ETC_AREA_RCPTDE", "other") : null,
-    kind === "apt" ? event("rank2", "2순위 해당지역", raw.GNRL_RNK2_CRSPAREA_RCPTDE, raw.GNRL_RNK2_CRSPAREA_ENDDE, "00:00", "23:59", "GNRL_RNK2_CRSPAREA_RCPTDE", "local") : null,
-    kind === "apt" ? event("rank2", "2순위 경기지역", raw.GNRL_RNK2_ETC_GG_RCPTDE, raw.GNRL_RNK2_ETC_GG_ENDDE, "00:00", "23:59", "GNRL_RNK2_ETC_GG_RCPTDE", "gyeonggi") : null,
-    kind === "apt" ? event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE, "00:00", "23:59", "GNRL_RNK2_ETC_AREA_RCPTDE", "other") : null,
-    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59", "PRZWNER_PRESNATN_DE"),
-    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "00:00", "23:59", "CNTRCT_CNCLS_BGNDE"),
-  ];
-  const hasDetailedReceipt = candidates.some((item) => item && ["special", "rank1", "rank2"].includes(item.kind));
-  if (hasDetailedReceipt) candidates = candidates.filter((item) => item?.kind !== "receipt");
-  const seen = new Set<string>();
-  return candidates
-    .filter((item): item is ApplicationEvent => item !== null)
-    .filter((item) => {
-      const key = `${item.kind}|${item.label}|${item.start}|${item.end ?? ""}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start) || eventPriority(a) - eventPriority(b));
+// 접수·특별공급·순위별 일정 생성은 core/normalize.ts의 buildRemndrEvents·buildAptEvents가
+// 단일 소스다(모집공고·접수·발표·계약 라벨, 지역 우선순위, dedupe 규칙 전부 그쪽에서 관리).
+// remndr은 无순위·잔여(no-priority), apt는 특별공급·순위별 접수(receipt/special/rank1/rank2)로
+// 이벤트 종류가 달라 kind로만 분기한다.
+function eventsFor(raw: RawItem, kind: SourceKind, noticeId?: string): ApplicationEvent[] {
+  return kind === "remndr"
+    ? buildRemndrEvents(raw as RawRemndrItem, noticeId)
+    : buildAptEvents(raw as RawAptItem, noticeId);
 }
 
 function recentAnnouncementCutoff(days = 120): string {
@@ -517,13 +372,11 @@ function normalize(
     ?? normalizeYmd(raw.SPSPLY_RCEPT_BGNDE)
     ?? startEvent.start.slice(0, 10);
 
-  const identity = noticeIdentity(raw, houseName, startYmd);
-  const identifiedEvents = events.map((item, index) => ({
-    ...item,
-    id: `${identity.id}:${item.sourceField || `${item.kind}-${index}`}`,
-    noticeId: identity.id,
-  }));
-  const modelSummaries = normalizeModels(models);
+  const identity = noticeIdentity(raw as RawRemndrItem, houseName, startYmd);
+  // draftEvents와 같은 raw로 다시 빌드해 id·noticeId만 채운다(core의 normalizeRemndrItem·
+  // normalizeAptItem과 동일한 2단계 패턴 — identity를 먼저 계산한 뒤 이벤트를 확정한다).
+  const identifiedEvents = eventsFor(raw, kind, identity.id);
+  const modelSummaries = normalizeModels(models as RawRemndrModelItem[]);
   const prices = modelSummaries
     .map((model) => model.priceMax)
     .filter((price): price is number => typeof price === "number");
@@ -540,7 +393,7 @@ function normalize(
     legacyIds: identity.legacyIds,
     manageNo: identity.manageNo || undefined,
     pblancNo: identity.pblancNo || undefined,
-    type: kind === "apt" ? "일반공급" : resolveType(raw),
+    type: kind === "apt" ? "일반공급" : resolveType(raw as RawRemndrItem),
     officialTypeName: text(raw.HOUSE_SECD_NM),
     housingCategory: "아파트",
     sourceOperation: kind === "apt" ? APT_DETAIL_OPERATION : REMNDR_DETAIL_OPERATION,
