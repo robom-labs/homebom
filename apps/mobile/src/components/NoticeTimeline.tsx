@@ -23,7 +23,7 @@ export function NoticeTimeline({ notice, now }: Props) {
       <Text style={styles.heading}>공식 일정과 다음 행동</Text>
       <View style={styles.nextCard}>
         <Text style={styles.nextEyebrow}>{next?.isInProgress ? "지금 진행 중" : "가장 가까운 다음 행동"}</Text>
-        <Text style={styles.nextTitle}>{next ? `${next.label} · ${formatMilestoneRange(next)}` : "모든 샘플 일정이 지났습니다"}</Text>
+        <Text style={styles.nextTitle}>{next ? `${next.label} · ${formatMilestoneRange(next)}` : "표시할 공식 일정이 모두 지났습니다"}</Text>
         <Text style={styles.nextAction}>{next?.nextAction ?? "청약홈에서 공고의 최신 상태를 확인하세요."}</Text>
       </View>
 

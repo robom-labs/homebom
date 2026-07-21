@@ -4,14 +4,24 @@
 
 ## 앱 계약
 
-- 앱 버전은 `0.14.2`이다.
+- 앱 버전은 루트·코어와 동일한 `0.14.8`이다. (`app.json`·`package.json`이 일치해야 static 검증을 통과한다.)
 - Android application ID와 iOS bundle identifier는 모두 `kr.robom.homebom`이다.
 - custom scheme은 `homebom`이다.
-- 샘플 공고 안정 ID는 웹 도메인 규칙과 같은 `HOUSE_MANAGE_NO-PBLANC_NO` 형식의 `2026000001-1`이다.
-- 네이티브 관심 목록은 `homebom:native:interests:v1`에 저장한다. 웹의 `zzc:*` localStorage 키는 읽거나 쓰지 않는다.
+- 공고 안정 ID는 웹 도메인 규칙과 같은 `HOUSE_MANAGE_NO-PBLANC_NO` 형식이며, 공유 코어 `@zoopzoopcall/core`가 발급한 값을 그대로 쓴다.
+- 네이티브 관심 목록은 `homebom:native:interests:v1`, 마지막 확인본(LKG)은 `homebom:native:notices:lkg:v1`에 저장한다. 웹의 `zzc:*`/localStorage 키는 읽거나 쓰지 않는다.
 - `expo-notifications`는 로컬 알림만 사용한다. Expo push token, FCM/APNs secret, 원격 발송 서버는 사용하지 않는다.
 
-화면의 공고는 실제 신청 대상이 아닌 명시적 개발 샘플이다. preview·production 전에 검증된 청약홈 응답의 공고 ID, 일정, `PBLANC_URL`로 교체해야 한다.
+## 공고 데이터 소스
+
+화면의 공고는 **실제 청약홈 공고**다. 앱은 웹과 같은 공개 프록시에서만 데이터를 불러오며, 데이터를 지어내지 않는다.
+
+- 웹의 `VITE_NOTICES_URL`에 대응하는 `EXPO_PUBLIC_NOTICES_URL`에서만 실공고를 불러온다.
+- Production 공개 프록시 URL(공개 함수, secret 아님): `https://neqjmxaneibobpedgsnl.supabase.co/functions/v1/notices`
+- 응답 검증은 공유 코어 `@zoopzoopcall/core`의 `parseNoticeList`·`sanitizeNoticeUrls`·`Notice` 타입을 재사용한다.
+- 활성 공고 조건은 웹과 동일: `cancelled !== true && Date.parse(receiptEnd) >= Date.now()`.
+- 응답 헤더 `x-data-stale`(`1`이면 stale)·`x-verified-at`을 그대로 해석하고, 10초 안에 응답이 없으면 AbortController로 중단한다.
+- 성공한 live 응답은 `homebom:native:notices:lkg:v1`에 마지막 확인본으로 저장(최대 72시간)하고, 오류·타임아웃 시 LKG(=stale)로, 없으면 not-connected로 떨어진다.
+- `EXPO_PUBLIC_NOTICES_URL`이 없으면 데이터를 만들지 않고 "연결 준비 중" 상태로 남는다. build에서 이 값을 설정해야 실공고가 보인다.
 
 ## 로컬 실행
 

@@ -1,4 +1,4 @@
-// 샘플 공고의 출처와 안정 식별자, 공급 핵심값을 카드로 보여준다.
+// 공고의 출처와 안정 식별자, 공급 핵심값을 카드로 보여준다.
 import { StyleSheet, Text, View } from "react-native";
 import type { NativeNotice } from "../domain/notice";
 import { colors } from "../theme";
@@ -11,7 +11,7 @@ export function NoticeOverview({ notice }: Props) {
   return (
     <View style={styles.card}>
       <View style={styles.badgeRow}>
-        <Text style={styles.badge}>공식 형식 샘플</Text>
+        <Text style={styles.badge}>청약홈 공고</Text>
         <Text style={styles.category}>{notice.category}</Text>
       </View>
       <Text style={styles.title}>{notice.title}</Text>
@@ -21,8 +21,8 @@ export function NoticeOverview({ notice }: Props) {
         <Text style={styles.identityLabel}>안정 ID</Text>
         <Text selectable style={styles.identityValue}>{notice.id}</Text>
       </View>
-      <Text style={styles.source}>출처 형식 · {notice.sourceLabel}</Text>
-      <Text style={styles.disclaimer}>실제 신청 대상이 아닌 앱 동작 확인용 샘플입니다. 신청 전 청약홈 최신 공고를 확인하세요.</Text>
+      <Text style={styles.source}>출처 · {notice.sourceLabel}</Text>
+      <Text style={styles.disclaimer}>표시된 정보는 청약홈 공식 자료 기준입니다. 신청 전 청약홈에서 원문과 정정 여부를 확인하세요.</Text>
     </View>
   );
 }

@@ -72,12 +72,13 @@ for (const sourceFile of sourceFiles) {
   }
 }
 
-const sampleSource = await readFile(join(projectRoot, "src/data/sampleNotice.ts"), "utf8");
 const storageSource = await readFile(join(projectRoot, "src/storage/interests.ts"), "utf8");
+const feedSource = await readFile(join(projectRoot, "src/domain/noticesFeed.ts"), "utf8");
 const appSource = await readFile(join(projectRoot, "App.tsx"), "utf8");
-assert(sampleSource.includes('SAMPLE_NOTICE_ID = "2026000001-1"'), "샘플 안정 ID가 바뀌었습니다.");
 assert(storageSource.includes('"homebom:native:interests:v1"'), "네이티브 전용 관심 저장 키가 필요합니다.");
 assert(!storageSource.includes("zzc:subs:") && !storageSource.includes("zzc:fired:"), "웹 저장 키를 네이티브 저장소에서 사용하면 안 됩니다.");
+assert(feedSource.includes('"homebom:native:notices:lkg:v1"'), "네이티브 전용 마지막 확인본 저장 키가 필요합니다.");
+assert(feedSource.includes("EXPO_PUBLIC_NOTICES_URL") || (await readFile(join(projectRoot, "src/hooks/useNotices.ts"), "utf8")).includes("EXPO_PUBLIC_NOTICES_URL"), "실공고 URL은 EXPO_PUBLIC_NOTICES_URL에서만 읽어야 합니다.");
 assert(!appSource.includes("requestPermissionsAsync"), "App 초기화 경로에서 알림 권한을 직접 요청하면 안 됩니다.");
 
 console.log("HomeBom mobile config validation passed.");

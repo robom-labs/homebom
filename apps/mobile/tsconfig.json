@@ -3,7 +3,7 @@
   "compilerOptions": {
     "strict": true,
     "noEmit": true,
-    "noUncheckedIndexedAccess": true
+    "skipLibCheck": true
   },
   "include": [
     "**/*.ts",

@@ -15,7 +15,7 @@
     "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "kr.robom.homebom",
-      "buildNumber": "15",
+      "buildNumber": "16",
       "supportsTablet": true,
       "associatedDomains": [
         "applinks:robom.kr"
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "kr.robom.homebom",
-      "versionCode": 15,
+      "versionCode": 16,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#E8F5EA"
