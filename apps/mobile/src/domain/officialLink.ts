@@ -2,7 +2,7 @@
 import { Linking } from "react-native";
 
 export const DEFAULT_APPLYHOME_URL =
-  "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancList.do";
+  "https://www.applyhome.co.kr/";
 
 export function resolveOfficialApplyHomeUrl(value: string | undefined): string {
   if (!value) return DEFAULT_APPLYHOME_URL;

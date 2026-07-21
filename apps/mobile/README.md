@@ -21,7 +21,7 @@
 - 활성 공고 조건은 웹과 동일: `cancelled !== true && Date.parse(receiptEnd) >= Date.now()`.
 - 응답 헤더 `x-data-stale`(`1`이면 stale)·`x-verified-at`을 그대로 해석하고, 10초 안에 응답이 없으면 AbortController로 중단한다.
 - 성공한 live 응답은 `homebom:native:notices:lkg:v1`에 마지막 확인본으로 저장(최대 72시간)하고, 오류·타임아웃 시 LKG(=stale)로, 없으면 not-connected로 떨어진다.
-- `EXPO_PUBLIC_NOTICES_URL`이 없으면 데이터를 만들지 않고 "연결 준비 중" 상태로 남는다. build에서 이 값을 설정해야 실공고가 보인다.
+- `EXPO_PUBLIC_NOTICES_URL`이 없으면 데이터를 만들지 않고 "연결 준비 중" 상태로 남는다. EAS `production` 프로필은 위 공개 프록시 주소를 명시해 실공고 연결이 빠지지 않게 한다.
 
 ## 로컬 실행
 
@@ -46,7 +46,7 @@ pnpm start
 
 ## 환경 변수
 
-`EXPO_PUBLIC_APPLYHOME_NOTICE_URL`에는 공개된 청약홈 HTTPS 주소만 넣는다. 앱은 `applyhome.co.kr`이 아닌 주소를 무시하고 공식 공고 목록 URL로 되돌린다. `EXPO_PUBLIC_*` 값은 앱 번들에 공개되므로 secret을 넣으면 안 된다.
+`EXPO_PUBLIC_NOTICES_URL`은 앱 번들에 공개되는 값이므로 secret을 넣으면 안 된다. 앱은 응답 공고의 `applyHomeUrl`을 사용하며, 유효한 청약홈 HTTPS 주소가 아니면 정상 응답하는 청약홈 공식 홈으로 되돌린다.
 
 ## 정적 검증
 

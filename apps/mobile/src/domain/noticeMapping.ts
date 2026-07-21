@@ -90,7 +90,7 @@ export function nativeNoticeFromCore(notice: Notice): NativeNotice {
     address: notice.address ?? notice.region,
     supplyCount: notice.supplyCount ?? 0,
     sourceLabel: SOURCE_LABEL,
-    officialUrl: notice.applyHomeUrl,
+    officialUrl: notice.noticeUrl ?? notice.applyHomeUrl,
     milestones,
   };
 }

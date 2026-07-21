@@ -18,6 +18,9 @@
     },
     "production": {
       "autoIncrement": false,
+      "env": {
+        "EXPO_PUBLIC_NOTICES_URL": "https://neqjmxaneibobpedgsnl.supabase.co/functions/v1/notices"
+      },
       "android": {
         "buildType": "app-bundle"
       },

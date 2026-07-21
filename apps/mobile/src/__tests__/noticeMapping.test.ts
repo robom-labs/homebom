@@ -98,4 +98,10 @@ describe("nativeNoticeFromCore", () => {
     expect(nativeNoticeFromCore(makeNotice({ housingCategory: "아파트" })).category).toBe("아파트");
     expect(nativeNoticeFromCore(makeNotice({ housingCategory: undefined, officialTypeName: "민영 무순위" })).category).toBe("민영 무순위");
   });
+
+  it("공고별 청약홈 상세 원문을 우선하고 없으면 공식 홈으로 폴백한다", () => {
+    const noticeUrl = "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancDetail.do?houseManageNo=2026000123&pblancNo=1";
+    expect(nativeNoticeFromCore(makeNotice({ noticeUrl })).officialUrl).toBe(noticeUrl);
+    expect(nativeNoticeFromCore(makeNotice({ noticeUrl: undefined })).officialUrl).toBe("https://www.applyhome.co.kr");
+  });
 });

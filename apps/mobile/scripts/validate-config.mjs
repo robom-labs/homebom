@@ -31,11 +31,14 @@ const [appConfig, easConfig, packageJson, rootPackageJson] = await Promise.all([
 ]);
 
 const expo = appConfig.expo;
+const productionNoticesUrl = "https://neqjmxaneibobpedgsnl.supabase.co/functions/v1/notices";
 assert(packageJson.dependencies.expo.startsWith("~57.0."), "expo는 SDK 57 버전이어야 합니다.");
 assert(packageJson.dependencies["expo-notifications"].startsWith("~57.0."), "expo-notifications는 SDK 57 호환 버전이어야 합니다.");
 assert(!packageJson.dependencies["react-native-webview"], "WebView 의존성을 사용할 수 없습니다.");
 assert(expo.scheme === "homebom", "scheme은 homebom이어야 합니다.");
 assert(expo.android.package === "kr.robom.homebom", "Android package가 일치하지 않습니다.");
+assert(Number.isInteger(expo.android.versionCode) && expo.android.versionCode >= 16, "Android versionCode는 Play 미사용 16 이상이어야 합니다.");
+assert(!(expo.android.permissions ?? []).includes("com.google.android.gms.permission.AD_ID"), "AD_ID 권한을 선언하면 안 됩니다.");
 assert(expo.ios.bundleIdentifier === "kr.robom.homebom", "iOS bundleIdentifier가 일치하지 않습니다.");
 assert(expo.ios.associatedDomains.includes("applinks:robom.kr"), "iOS Universal Link 도메인이 필요합니다.");
 assert(expo.icon === "./assets/icon.png", "스토어용 앱 아이콘 경로가 필요합니다.");
@@ -53,7 +56,15 @@ for (const profile of ["development", "preview", "production"]) {
 assert(easConfig.build.development.developmentClient === true, "development profile은 development client여야 합니다.");
 assert(easConfig.build.development.distribution === "internal", "development profile은 internal 배포여야 합니다.");
 assert(easConfig.build.preview.distribution === "internal", "preview profile은 internal 배포여야 합니다.");
+assert(easConfig.build.production.android?.buildType === "app-bundle", "production Android는 AAB여야 합니다.");
+assert(easConfig.build.production.env?.EXPO_PUBLIC_NOTICES_URL === productionNoticesUrl, "production은 실공고 공개 URL을 명시해야 합니다.");
 assert(!easConfig.submit, "이 프로젝트에는 자동 store submit 설정을 두지 않습니다.");
+
+const forbiddenMobilePackages = /(firebase-analytics|google-mobile-ads|admob|appsflyer|amplitude|mixpanel|segment)/i;
+assert(
+  !Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies }).some((name) => forbiddenMobilePackages.test(name)),
+  "광고·분석·Firebase Analytics SDK를 의존성에 포함하면 안 됩니다.",
+);
 
 const sourceFiles = [
   join(projectRoot, "App.tsx"),
