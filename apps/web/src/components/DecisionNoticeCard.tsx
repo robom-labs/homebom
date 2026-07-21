@@ -77,19 +77,33 @@ export function AreaValue({ areas }: { areas: number[] }) {
   );
 }
 
+export function ManwonValue({ amount }: { amount: number }) {
+  const text = formatManwon(amount);
+  const spaceIndex = text.indexOf(" ");
+  // "4억 8,200만원"처럼 억·만원 두 덩어리인 금액은 좁은 타일에서 통째로 nowrap이면
+  // 카드 경계 밖으로 잘린다. 각 덩어리는 nowrap으로 붙여 읽되 사이에서만 줄바꿈되게 나눈다.
+  if (spaceIndex === -1) return <span className="detail__nowrap">{text}</span>;
+  return (
+    <>
+      <span className="detail__nowrap">{text.slice(0, spaceIndex)}</span>{" "}
+      <span className="detail__nowrap">{text.slice(spaceIndex + 1)}</span>
+    </>
+  );
+}
+
 function PriceValue({ notice }: { notice: Notice }) {
   const { priceMin, priceMax } = notice;
   if (priceMin == null && priceMax == null) return null;
   if (priceMin != null && priceMax != null && priceMin !== priceMax) {
     return (
       <>
-        <span className="detail__nowrap">{formatManwon(priceMin)}</span>
+        <ManwonValue amount={priceMin} />
         <span className="detail__muted-separator"> ~ </span>
-        <span className="detail__nowrap">{formatManwon(priceMax)}</span>
+        <ManwonValue amount={priceMax} />
       </>
     );
   }
-  return <span className="detail__nowrap">{formatManwon(priceMax ?? priceMin!)}</span>;
+  return <ManwonValue amount={priceMax ?? priceMin!} />;
 }
 
 function sumKnown(values: Array<number | undefined>): number | undefined {

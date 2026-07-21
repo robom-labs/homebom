@@ -3,7 +3,7 @@
 // 각 숫자는 nowrap으로 붙여 읽되 물결(~) 앞에서 줄바꿈이 가능하도록 <wbr/>로 분할되어야 한다.
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AreaValue } from "../DecisionNoticeCard";
+import { AreaValue, ManwonValue } from "../DecisionNoticeCard";
 
 describe("AreaValue 공급면적 렌더링", () => {
   it("범위 값은 물결 앞에서 줄바꿈 가능하도록 <wbr/>로 분할한다", () => {
@@ -25,5 +25,23 @@ describe("AreaValue 공급면적 렌더링", () => {
 
   it("면적이 없으면 아무것도 렌더링하지 않는다", () => {
     expect(renderToStaticMarkup(<AreaValue areas={[]} />)).toBe("");
+  });
+});
+
+describe("ManwonValue 분양가 렌더링", () => {
+  it("억·만원 두 덩어리 금액은 통짜 nowrap이 아니라 사이에서 줄바꿈 가능하게 분할한다", () => {
+    const html = renderToStaticMarkup(<ManwonValue amount={48200} />);
+    // "4억 8,200만원"이 한 nowrap 스팬에 묶여 좁은 타일에서 잘리면 안 된다.
+    expect(html).not.toContain('<span class="detail__nowrap">4억 8,200만원</span>');
+    // 억·만원 덩어리는 각각 nowrap으로 보존한다.
+    expect(html).toContain("4억");
+    expect(html).toContain("8,200만원");
+    expect(html.match(/detail__nowrap/g)?.length ?? 0).toBe(2);
+  });
+
+  it("억만 있는 금액은 분할 없이 한 덩어리로 표시한다", () => {
+    const html = renderToStaticMarkup(<ManwonValue amount={30000} />);
+    expect(html).toContain("3억원");
+    expect(html.match(/detail__nowrap/g)?.length ?? 0).toBe(1);
   });
 });
