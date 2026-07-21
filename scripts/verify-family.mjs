@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-const PINNED_SOURCE_COMMIT = "916477ce665a73d2f91c29d4bae510f111a57047";
+const PINNED_SOURCE_COMMIT = "75d4f9d4c803e1dbaa6dda67e48b6ed23960520f";
 const REQUIRED_FILES = [
   "analytics-events.ts",
   "app-meta.json",
@@ -25,7 +25,8 @@ const lock = JSON.parse(await readFile(lockFile, "utf8"));
 if (lock.sourceCommit !== PINNED_SOURCE_COMMIT) {
   throw new Error("family.lock.json sourceCommit이 고정 정본 SHA와 다릅니다.");
 }
-if (lock.familySpecVersion !== "1.0.0") {
+const SUPPORTED_FAMILY_SPECS = new Set(["1.0.0", "1.1.0"]);
+if (!SUPPORTED_FAMILY_SPECS.has(lock.familySpecVersion)) {
   throw new Error("지원하지 않는 패밀리 규격입니다: " + lock.familySpecVersion);
 }
 

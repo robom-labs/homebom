@@ -1,5 +1,5 @@
 {
-  "_generated": "DO NOT EDIT · robom family 1.0.0",
+  "_generated": "DO NOT EDIT · robom family 1.1.0",
   "id": "homebom",
   "name": "청약봄",
   "englishName": "HomeBom",
@@ -10,8 +10,8 @@
   "privacyUrl": "https://robom.kr/privacy/homebom",
   "supportUrl": "https://robom.kr/support",
   "deployProvider": "github-pages",
-  "familySpecVersion": "1.0.0",
-  "lastVerifiedAt": "2026-07-19T00:11:07+09:00",
+  "familySpecVersion": "1.1.0",
+  "lastVerifiedAt": "2026-07-19T15:10:00+09:00",
   "familyApps": [
     {
       "id": "outbom",
