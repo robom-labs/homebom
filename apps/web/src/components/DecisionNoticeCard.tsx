@@ -51,7 +51,7 @@ function modelAreas(notice: Notice): number[] {
     .sort((a, b) => a - b);
 }
 
-function AreaValue({ areas }: { areas: number[] }) {
+export function AreaValue({ areas }: { areas: number[] }) {
   if (areas.length === 0) return null;
   const first = areas[0];
   const last = areas[areas.length - 1];
@@ -66,9 +66,13 @@ function AreaValue({ areas }: { areas: number[] }) {
   }
   return (
     <>
-      <span className="detail__nowrap">{trimDecimal(first, 2)}~{trimDecimal(last, 2)}㎡</span>
+      <span className="detail__nowrap">{trimDecimal(first, 2)}</span>
+      <wbr />
+      <span className="detail__nowrap">~{trimDecimal(last, 2)}㎡</span>
       <span className="detail__muted-separator"> · </span>
-      <span className="detail__nowrap detail__accent">약 {trimDecimal(pyeongFromSqm(first), 1)}~{trimDecimal(pyeongFromSqm(last), 1)}평</span>
+      <span className="detail__nowrap detail__accent">약 {trimDecimal(pyeongFromSqm(first), 1)}</span>
+      <wbr />
+      <span className="detail__nowrap detail__accent">~{trimDecimal(pyeongFromSqm(last), 1)}평</span>
     </>
   );
 }
