@@ -106,8 +106,6 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 export function InfoScreen({ source }: { source: NoticeSource }) {
   const [permission, setPermission] = useState<string>(() => notificationSupport());
   const [guide, setGuide] = useState<string | null>(null);
-  const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [installStatus, setInstallStatus] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [analyticsConsent, setAnalyticsConsentState] = useState(analyticsConsentGranted);
   const pwa = usePwaInstall();
@@ -131,23 +129,6 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
         : permission === "unsupported"
           ? "이 브라우저는 알림을 지원하지 않습니다."
           : "알림 권한을 아직 요청하지 않았어요.";
-
-  const installLabel = pwa.canPrompt
-    ? "이 기기에 청약봄 설치"
-    : pwa.isIosSafari
-      ? "아이폰 설치 방법 보기"
-      : "설치 방법 보기";
-
-  const onInstall = async () => {
-    setInstallStatus(null);
-    const outcome = await pwa.promptInstall();
-    if (outcome === "manual") {
-      setShowInstallGuide(true);
-      return;
-    }
-    setShowInstallGuide(false);
-    setInstallStatus(outcome === "accepted" ? "설치 요청을 보냈습니다." : "설치를 취소했습니다. 언제든 다시 시도할 수 있어요.");
-  };
 
   const onUpdate = async () => {
     setUpdateStatus("업데이트를 확인하고 있어요…");
@@ -215,27 +196,13 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
         <p className="settings-note">기기의 글자 크기와 브라우저 확대를 따르며, 주요 버튼과 하단 메뉴는 손가락으로 누르기 쉬운 크기를 유지합니다.</p>
       </section>
 
-      <section className="settings-card" aria-labelledby="install-update">
-        <CardHead icon={IC.install} title="설치와 업데이트" id="install-update" />
-        <p className="settings-note">
-          {pwa.isStandalone
-            ? "청약봄이 홈 화면에 설치되어 있어요. 새 버전은 앱을 다시 열 때 안전하게 갱신됩니다."
-            : "설치하면 홈 화면에서 빠르게 열고, 한 번 본 화면은 네트워크가 불안정해도 다시 열 수 있어요."}
-        </p>
+      <section className="settings-card" aria-labelledby="update-section">
+        <CardHead icon={IC.refresh} title="업데이트" id="update-section" />
+        <p className="settings-note">청약봄은 접속할 때마다 최신 버전으로 유지돼요. 새 버전은 앱을 다시 열 때 안전하게 갱신됩니다.</p>
         <div className="settings-deeplinks">
-          {!pwa.isStandalone && <button type="button" className="primary-action" onClick={() => void onInstall()}>{installLabel}</button>}
           <button type="button" className="ghost-action" onClick={() => void onUpdate()}><Ic d={IC.refresh} />업데이트 확인</button>
         </div>
-        {showInstallGuide && (
-          <p className="settings-guide" role="status">
-            {pwa.isIosSafari
-              ? "Safari의 공유 버튼을 누른 뒤 ‘홈 화면에 추가’와 ‘추가’를 차례로 선택하세요."
-              : "브라우저 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택하세요."}
-          </p>
-        )}
-        {installStatus && <p className="settings-guide" role="status">{installStatus}</p>}
         {updateStatus && <p className="settings-guide" role="status">{updateStatus}</p>}
-        <p className="settings-note"><a href={familyMeta.stableInstallUrl} target="_blank" rel="noreferrer">플랫폼별 안정 설치 안내 열기</a></p>
       </section>
 
       <section className="settings-card" aria-labelledby="data-source">
@@ -256,8 +223,8 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
             href={app.installUrl}
             icon={IC.house}
             title={app.name}
-            sub={APP_DESCRIPTIONS[app.id] || "설치·웹 사용 안내"}
-            badge={app.id === familyMeta.id ? "현재 앱" : "설치·열기"}
+            sub={(APP_DESCRIPTIONS[app.id] || "로봄 패밀리 앱") + " · 2026년 8월 초 출시 예정"}
+            badge="준비 중"
           />
         ))}
       </section>
