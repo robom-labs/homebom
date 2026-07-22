@@ -50,6 +50,11 @@ assert(typeof expo.description === "string" && expo.description.length >= 20, "�
 assert(expo.platforms.length === 2 && expo.platforms.includes("android") && expo.platforms.includes("ios"), "Android와 iOS만 대상으로 해야 합니다.");
 assert(expo.plugins.some((plugin) => Array.isArray(plugin) && plugin[0] === "expo-notifications"), "expo-notifications config plugin이 필요합니다.");
 
+const androidBuildProperties = expo.plugins.find((plugin) => Array.isArray(plugin) && plugin[0] === "expo-build-properties");
+assert(packageJson.dependencies["expo-build-properties"]?.startsWith("~57.0."), "expo-build-properties dependency must match Expo SDK 57.");
+assert(androidBuildProperties?.[1]?.android?.compileSdkVersion >= 36, "Android compileSdkVersion must be at least 36.");
+assert(androidBuildProperties?.[1]?.android?.targetSdkVersion === 36, "Android targetSdkVersion must be 36.");
+
 for (const profile of ["development", "preview", "production"]) {
   assert(easConfig.build[profile], `EAS ${profile} profile이 필요합니다.`);
 }
