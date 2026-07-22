@@ -1,7 +1,7 @@
 {
   "name": "homebom",
   "private": true,
-  "version": "0.14.8",
+  "version": "0.14.9",
   "scripts": {
     "test": "pnpm -r test && pnpm validate:web-shell",
     "typecheck": "pnpm -r typecheck",
@@ -16,5 +16,6 @@
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7"
   },
-  "packageManager": "pnpm@9.15.9"
+  "packageManager": "pnpm@9.15.9",
+  "workspaces": ["packages/*", "apps/*"]
 }

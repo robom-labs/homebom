@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.14.9
+
+- `notices` Edge Function(Deno)이 자체 구현하던 공고 정규화(날짜·URL·ID·일정·주택형 정규화)를 걷어내고 `packages/core/src/notice/normalize.ts`를 단일 소스로 import하도록 정리했다. 두 구현이 갈라져 있던 걸 실측한 결과 `normalizeYmd`·`kstDateToUtcIso`·URL 정규화·ID 생성·주택형 정규화·일정(events) 생성 로직이 사실상 통째로 중복돼 있었고, 그 과정에서 Edge 쪽 ID 생성 로직에 `manageNo`·`pblancNo`가 둘 다 없는 공고에 `legacyIds: ["-"]`가 잘못 채워지는 잠재 버그도 있었다(core 쪽엔 없음) — 단일 소스화하며 함께 없어졌다. Deno는 Node와 모듈 해석 규칙이 달라 패키지 이름으로는 import할 수 없지만, `normalize.ts`가 타입 전용 import만 갖고 있어 상대경로+확장자 import로 그대로 동작함을 `deno run`/`deno check`로 확인했다(그 확인을 위해 `normalize.ts`의 `./types` import에도 확장자를 붙였다 — tsc·Vite·Vitest 쪽 해석에는 영향 없음). 리팩터 전후 산출물이 동일함을 원시 응답 픽스처로 직접 대조했고, `supabase/functions/notices/normalize.shared.test.ts`에 Deno 회귀 테스트를 추가했다(Node 기반 `pnpm -r test`에는 포함되지 않음 — `deno test`로 별도 실행). 사용자에게 보이는 동작 변화는 없다.
+
 ## 0.14.8
 
 - 하단 탭바를 로봄 패밀리 통일 디자인(반투명 프로스티드 바 + 상단 헤어라인, 활성 탭은 알약 배경 없이 앱 퍼스널 컬러(#0b7a50)로 색상만 강조)으로 맞췄다. 라벨·아이콘·탭 구성은 그대로 두고 디자인만 6개 앱과 통일했다. 서비스워커 캐시를 `zzc-v0.14.8`로 올렸다.
