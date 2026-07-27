@@ -47,6 +47,8 @@ assert(expo.version === packageJson.version && packageJson.version === rootPacka
 assert(expo.orientation === "default", "휴대폰·태블릿 회전을 모두 지원해야 합니다.");
 assert(expo.ios.supportsTablet === true, "iPad 지원이 켜져 있어야 합니다.");
 assert(typeof expo.description === "string" && expo.description.length >= 20, "스토어 설명이 필요합니다.");
+assert(expo.description.includes("https://www.applyhome.co.kr/"), "스토어 설명에 청약홈 공식 URL을 명시해야 합니다.");
+assert(expo.description.includes("제휴하지 않은"), "스토어 설명에 청약홈 비제휴 고지를 명시해야 합니다.");
 assert(expo.platforms.length === 2 && expo.platforms.includes("android") && expo.platforms.includes("ios"), "Android와 iOS만 대상으로 해야 합니다.");
 assert(expo.plugins.some((plugin) => Array.isArray(plugin) && plugin[0] === "expo-notifications"), "expo-notifications config plugin이 필요합니다.");
 
@@ -97,6 +99,8 @@ assert(!storageSource.includes("zzc:subs:") && !storageSource.includes("zzc:fire
 assert(feedSource.includes('"homebom:native:notices:lkg:v1"'), "네이티브 전용 마지막 확인본 저장 키가 필요합니다.");
 assert(feedSource.includes("EXPO_PUBLIC_NOTICES_URL") || (await readFile(join(projectRoot, "src/hooks/useNotices.ts"), "utf8")).includes("EXPO_PUBLIC_NOTICES_URL"), "실공고 URL은 EXPO_PUBLIC_NOTICES_URL에서만 읽어야 합니다.");
 assert(!appSource.includes("requestPermissionsAsync"), "App 초기화 경로에서 알림 권한을 직접 요청하면 안 됩니다.");
+assert(appSource.includes("정부 정보 출처"), "첫 화면에서 정부 정보의 출처를 명시해야 합니다.");
+assert(appSource.includes("https://www.applyhome.co.kr/"), "첫 화면에서 청약홈 공식 URL을 확인할 수 있어야 합니다.");
 assert(overviewSource.includes("공식·제휴·승인 앱이 아니며"), "정부기관 비제휴 고지를 앱 안에 표시해야 합니다.");
 assert(overviewSource.includes("EXPO_PUBLIC_PRIVACY_URL"), "앱 안에서 개인정보 처리방침을 열 수 있어야 합니다.");
 
