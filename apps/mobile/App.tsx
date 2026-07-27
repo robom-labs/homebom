@@ -8,7 +8,7 @@ import { InterestControls } from "./src/components/InterestControls";
 import { NoticeOverview } from "./src/components/NoticeOverview";
 import { NoticeTimeline } from "./src/components/NoticeTimeline";
 import type { NativeNotice } from "./src/domain/notice";
-import { openOfficialApplyHome } from "./src/domain/officialLink";
+import { DEFAULT_APPLYHOME_URL, openOfficialApplyHome } from "./src/domain/officialLink";
 import { IS_NOTICES_CONFIGURED, useNotices } from "./src/hooks/useNotices";
 import {
   cancelNoticeNotifications,
@@ -117,6 +117,7 @@ export function App() {
           showsVerticalScrollIndicator={false}
         >
           <BrandHeader />
+          <OfficialSourceNotice onOpen={() => void openOfficialApplyHome(DEFAULT_APPLYHOME_URL)} />
           {loading ? (
             <StatusCard>
               <ActivityIndicator color={colors.accentDeep} />
@@ -180,6 +181,28 @@ function StatusCard({ children }: { children: ReactNode }) {
   return <View style={styles.statusCard}>{children}</View>;
 }
 
+function OfficialSourceNotice({ onOpen }: { onOpen: () => void }) {
+  return (
+    <View style={styles.officialSourceCard}>
+      <Text style={styles.officialSourceEyebrow}>정부 정보 출처</Text>
+      <Text style={styles.officialSourceTitle}>한국부동산원 청약홈</Text>
+      <Text style={styles.officialSourceBody}>
+        청약 공고, 신청 자격과 일정의 공식 원문은 청약홈에서 확인합니다. 청약봄은 정부기관, 한국부동산원 또는 청약홈의 공식·제휴·승인 앱이 아닙니다.
+      </Text>
+      <Text selectable style={styles.officialSourceUrl}>https://www.applyhome.co.kr/</Text>
+      <Pressable
+        accessibilityRole="link"
+        accessibilityLabel="청약홈 공식 사이트 열기"
+        accessibilityHint="기기 기본 브라우저에서 한국부동산원 청약홈을 엽니다"
+        onPress={onOpen}
+        style={({ pressed }) => [styles.officialSourceButton, pressed && styles.retryPressed]}
+      >
+        <Text style={styles.officialSourceButtonLabel}>청약홈 공식 사이트 열기 ↗</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function RetryButton({ onPress }: { onPress: () => void }) {
   return (
     <Pressable
@@ -205,6 +228,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 24,
+  },
+  officialSourceCard: {
+    marginTop: 16,
+    padding: 18,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  officialSourceEyebrow: {
+    color: colors.accentDeep,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  officialSourceTitle: {
+    marginTop: 6,
+    color: colors.ink,
+    fontSize: 19,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  },
+  officialSourceBody: {
+    marginTop: 8,
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  officialSourceUrl: {
+    marginTop: 10,
+    color: colors.accentDeep,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  officialSourceButton: {
+    minHeight: 48,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.heroStrong,
+  },
+  officialSourceButtonLabel: {
+    color: colors.accentDeep,
+    fontSize: 15,
+    fontWeight: "800",
   },
   statusCard: {
     marginTop: 22,

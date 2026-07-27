@@ -2,8 +2,8 @@
   "expo": {
     "name": "청약봄",
     "slug": "homebom",
-    "version": "0.14.8",
-    "description": "공식 청약 공고의 접수·발표·계약 다음 행동을 확인하고 관심 일정 알림을 준비하는 청약봄",
+    "version": "0.14.9",
+    "description": "한국부동산원 청약홈(https://www.applyhome.co.kr/) 공식 공고의 접수·발표·계약 다음 행동을 확인하고 관심 일정 알림을 준비하는 청약봄. 청약홈과 제휴하지 않은 독립 앱입니다.",
     "platforms": [
       "ios",
       "android"
@@ -15,7 +15,7 @@
     "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "kr.robom.homebom",
-      "buildNumber": "16",
+      "buildNumber": "17",
       "supportsTablet": true,
       "associatedDomains": [
         "applinks:robom.kr"
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "kr.robom.homebom",
-      "versionCode": 16,
+      "versionCode": 17,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#E8F5EA"
