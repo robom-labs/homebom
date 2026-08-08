@@ -30,13 +30,5 @@
         "buildConfiguration": "Release"
       }
     }
-  },
-  "submit": {
-    "closed": {
-      "android": {
-        "track": "alpha",
-        "releaseStatus": "completed"
-      }
-    }
   }
 }
