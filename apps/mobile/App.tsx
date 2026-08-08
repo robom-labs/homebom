@@ -16,12 +16,14 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from "react-native-safe-area-context";
 import { BrandHeader } from "./src/components/BrandHeader";
 import { InterestControls } from "./src/components/InterestControls";
+import { NoticeCalendar } from "./src/components/NoticeCalendar";
 import { NoticeOverview } from "./src/components/NoticeOverview";
 import { NoticeTimeline } from "./src/components/NoticeTimeline";
 import type { NativeNotice } from "./src/domain/notice";
 import {
   bringNoticeToFront,
   countNoticeDateFilters,
+  countUpcomingReceiptStarts,
   discoverNotices,
   noticeDateFilterLabels,
   noticeDateFilters,
@@ -29,6 +31,7 @@ import {
   noticeIdFromNotificationData,
   type NoticeDateFilter,
 } from "./src/domain/noticeDiscovery";
+import { noticesForCalendarDate } from "./src/domain/noticeCalendar";
 import { openOfficialApplyHome } from "./src/domain/officialLink";
 import { noticeNotificationChanged } from "./src/domain/notificationRefresh";
 import { IS_NOTICES_CONFIGURED, useNotices } from "./src/hooks/useNotices";
@@ -81,6 +84,10 @@ export function App() {
   const [expandedNoticeId, setExpandedNoticeId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<NoticeDateFilter>("all");
   const [query, setQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [interestedOnly, setInterestedOnly] = useState(false);
   const [focusedNoticeId, setFocusedNoticeId] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState<NativeNotice | null>(null);
   const [navigationFeedback, setNavigationFeedback] = useState<string | null>(null);
@@ -92,17 +99,30 @@ export function App() {
   ), [notices, savedNotice]);
 
   const now = Date.now();
-  const dateCounts = countNoticeDateFilters(availableNotices, now);
+  const searchedNotices = discoverNotices(availableNotices, { filter: "all", query, now });
+  const discoveredNotices = interestedOnly
+    ? searchedNotices.filter((notice) => interest[notice.id]?.interested)
+    : searchedNotices;
+  const dateCounts = countNoticeDateFilters(discoveredNotices, now);
+  const listNotices = discoverNotices(discoveredNotices, { filter: dateFilter, query: "", now });
+  const calendarNotices = selectedCalendarDate
+    ? noticesForCalendarDate(discoveredNotices, selectedCalendarDate)
+    : [];
   const visibleNotices = bringNoticeToFront(
-    discoverNotices(availableNotices, { filter: dateFilter, query, now }),
+    viewMode === "list" ? listNotices : calendarNotices,
     focusedNoticeId,
   );
+  const interestCount = Object.values(interest).filter((entry) => entry.interested).length;
+  const upcomingReceiptCount = countUpcomingReceiptStarts(availableNotices, 14, now);
 
   const focusNotice = useCallback((noticeId: string) => {
     setFocusedNoticeId(noticeId);
     setExpandedNoticeId(noticeId);
     setDateFilter("all");
     setQuery("");
+    setViewMode("list");
+    setSelectedCalendarDate(null);
+    setInterestedOnly(false);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   }, []);
 
@@ -328,6 +348,7 @@ export function App() {
               <View style={styles.feedSummary} accessibilityRole="summary">
                 <Text style={styles.feedCount}>청약홈 활성 공고 {notices.length}건</Text>
                 <Text style={styles.feedFreshness}>{formatVerifiedAt(verifiedAt)}</Text>
+                <Text style={styles.feedUpcoming}>앞으로 14일 안에 접수를 시작하는 공고 {upcomingReceiptCount}건</Text>
                 <Text style={styles.feedHint}>아래로 당기면 최신 공고를 다시 확인합니다.</Text>
               </View>
               {source === "stale" && (
@@ -343,25 +364,49 @@ export function App() {
                 </View>
               )}
               <View style={styles.discoveryCard}>
-                <Text style={styles.discoveryTitle}>언제 시작하는 공고를 찾으세요?</Text>
-                <ScrollView
-                  horizontal
-                  contentContainerStyle={styles.filterRow}
-                  showsHorizontalScrollIndicator={false}
-                >
-                  {noticeDateFilters.map((filter) => (
-                    <DateFilterButton
-                      count={dateCounts[filter]}
-                      filter={filter}
-                      key={filter}
-                      onPress={() => {
-                        clearNotificationFocus();
-                        setDateFilter(filter);
-                      }}
-                      selected={dateFilter === filter}
-                    />
-                  ))}
-                </ScrollView>
+                <View accessibilityLabel="공고 보기 방식" style={styles.viewToggle}>
+                  <ViewModeButton
+                    label="목록"
+                    onPress={() => {
+                      clearNotificationFocus();
+                      setViewMode("list");
+                      setSelectedCalendarDate(null);
+                    }}
+                    selected={viewMode === "list"}
+                  />
+                  <ViewModeButton
+                    label="달력"
+                    onPress={() => {
+                      clearNotificationFocus();
+                      setViewMode("calendar");
+                      setDateFilter("all");
+                    }}
+                    selected={viewMode === "calendar"}
+                  />
+                </View>
+                <Text style={styles.discoveryTitle}>
+                  {viewMode === "list" ? "언제 시작하는 공고를 찾으세요?" : "날짜별 청약 일정을 확인하세요"}
+                </Text>
+                {viewMode === "list" ? (
+                  <ScrollView
+                    horizontal
+                    contentContainerStyle={styles.filterRow}
+                    showsHorizontalScrollIndicator={false}
+                  >
+                    {noticeDateFilters.map((filter) => (
+                      <DateFilterButton
+                        count={dateCounts[filter]}
+                        filter={filter}
+                        key={filter}
+                        onPress={() => {
+                          clearNotificationFocus();
+                          setDateFilter(filter);
+                        }}
+                        selected={dateFilter === filter}
+                      />
+                    ))}
+                  </ScrollView>
+                ) : null}
                 <View style={styles.searchRow}>
                   <TextInput
                     accessibilityLabel="공고명 지역 주소 유형 검색"
@@ -387,11 +432,51 @@ export function App() {
                     </Pressable>
                   ) : null}
                 </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !ready, selected: interestedOnly }}
+                  disabled={!ready}
+                  onPress={() => {
+                    clearNotificationFocus();
+                    setInterestedOnly((current) => !current);
+                    setSelectedCalendarDate(null);
+                  }}
+                  style={({ pressed }) => [
+                    styles.interestFilter,
+                    interestedOnly && styles.interestFilterSelected,
+                    !ready && styles.filterDisabled,
+                    pressed && styles.retryPressed,
+                  ]}
+                >
+                  <Text style={[styles.interestFilterLabel, interestedOnly && styles.filterLabelSelected]}>
+                    관심 공고만 {interestCount}건
+                  </Text>
+                </Pressable>
+                {viewMode === "calendar" ? (
+                  <NoticeCalendar
+                    monthOffset={calendarMonthOffset}
+                    notices={discoveredNotices}
+                    now={now}
+                    onChangeMonth={setCalendarMonthOffset}
+                    onSelectDate={(dateKey) => {
+                      clearNotificationFocus();
+                      setSelectedCalendarDate(dateKey);
+                    }}
+                    selectedDate={selectedCalendarDate}
+                  />
+                ) : null}
                 <Text accessibilityLiveRegion="polite" style={styles.resultCount}>
-                  조건에 맞는 공고 {visibleNotices.length}건
+                  {viewMode === "calendar" && !selectedCalendarDate
+                    ? "일정이 있는 날짜를 선택해 주세요"
+                    : `조건에 맞는 공고 ${visibleNotices.length}건`}
                 </Text>
               </View>
-              {visibleNotices.length === 0 ? (
+              {viewMode === "calendar" && !selectedCalendarDate ? (
+                <StatusCard>
+                  <Text style={styles.statusTitle}>달력에서 날짜를 선택해 주세요</Text>
+                  <Text style={styles.statusBody}>접수 기간뿐 아니라 공고일·당첨 발표·계약 일정까지 날짜별로 확인할 수 있습니다.</Text>
+                </StatusCard>
+              ) : visibleNotices.length === 0 ? (
                 <StatusCard>
                   <Text style={styles.statusTitle}>조건에 맞는 공고가 없습니다</Text>
                   <Text style={styles.statusBody}>접수 시기나 검색어를 바꿔 보세요. 전체 공고는 그대로 보존되어 있습니다.</Text>
@@ -400,6 +485,8 @@ export function App() {
                     onPress={() => {
                       setDateFilter("all");
                       setQuery("");
+                      setInterestedOnly(false);
+                      setSelectedCalendarDate(null);
                     }}
                     style={({ pressed }) => [styles.retryButton, pressed && styles.retryPressed]}
                   >
@@ -500,6 +587,31 @@ function DateFilterButton({
   );
 }
 
+function ViewModeButton({
+  label,
+  onPress,
+  selected,
+}: {
+  label: string;
+  onPress: () => void;
+  selected: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.viewButton,
+        selected && styles.viewButtonSelected,
+        pressed && styles.retryPressed,
+      ]}
+    >
+      <Text style={[styles.viewButtonLabel, selected && styles.viewButtonLabelSelected]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -541,6 +653,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
   },
+  feedUpcoming: {
+    marginTop: 5,
+    color: colors.ink,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "800",
+  },
   feedHint: {
     marginTop: 4,
     color: colors.muted,
@@ -576,6 +695,23 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: "900",
   },
+  viewToggle: {
+    flexDirection: "row",
+    gap: 4,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+  },
+  viewButton: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 11,
+  },
+  viewButtonSelected: { backgroundColor: colors.accentDeep },
+  viewButtonLabel: { color: colors.muted, fontSize: 14, fontWeight: "900" },
+  viewButtonLabelSelected: { color: "#FFFFFF" },
   filterRow: {
     gap: 8,
     paddingRight: 8,
@@ -628,6 +764,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
+  interestFilter: {
+    alignSelf: "flex-start",
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surfaceMuted,
+  },
+  interestFilterSelected: {
+    borderColor: colors.accentDeep,
+    backgroundColor: colors.accentDeep,
+  },
+  interestFilterLabel: { color: colors.ink, fontSize: 13, fontWeight: "900" },
+  filterDisabled: { opacity: 0.48 },
   resultCount: {
     color: colors.accentDeep,
     fontSize: 13,

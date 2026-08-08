@@ -13,4 +13,5 @@ export const colors = {
   warning: "#805600",
   warningSoft: "#FFF1C7",
   danger: "#B7473A",
+  focus: "#1769D2",
 } as const;

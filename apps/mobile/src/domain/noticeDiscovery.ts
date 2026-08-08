@@ -68,6 +68,20 @@ export function countNoticeDateFilters(
   return counts;
 }
 
+export function countUpcomingReceiptStarts(
+  notices: readonly NativeNotice[],
+  days: number,
+  now = Date.now(),
+): number {
+  if (!Number.isInteger(days) || days < 1) return 0;
+  const end = kstDayStart(now) + (days + 1) * DAY_MS;
+  return notices.filter((notice) => {
+    const receipt = receiptMilestone(notice);
+    const startsAt = Date.parse(receipt?.startsAt ?? "");
+    return Number.isFinite(startsAt) && startsAt > now && startsAt < end;
+  }).length;
+}
+
 function normalizedSearchText(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("ko-KR").replace(/\s+/gu, "");
 }

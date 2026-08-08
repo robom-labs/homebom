@@ -4,6 +4,7 @@ import type { NativeNotice } from "../domain/notice";
 import {
   bringNoticeToFront,
   countNoticeDateFilters,
+  countUpcomingReceiptStarts,
   discoverNotices,
   noticeDateBucket,
   noticeIdFromAppUrl,
@@ -54,6 +55,8 @@ describe("noticeDiscovery", () => {
       week: 1,
       later: 1,
     });
+    expect(countUpcomingReceiptStarts([open, week, later], 14, now)).toBe(2);
+    expect(countUpcomingReceiptStarts([open, week, later], 7, now)).toBe(1);
   });
 
   it("공고명·지역·주소·유형을 검색하고 선택한 시기만 반환한다", () => {

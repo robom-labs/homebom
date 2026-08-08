@@ -1,0 +1,79 @@
+name: HomeBom Data Watchdog
+
+on:
+  schedule:
+    - cron: "35 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: homebom-data-watchdog
+  cancel-in-progress: true
+
+jobs:
+  verify-production-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: 공개 데이터 최신성 독립 검증
+        id: health
+        continue-on-error: true
+        env:
+          VITE_NOTICES_URL: https://neqjmxaneibobpedgsnl.functions.supabase.co/notices
+          # 사용자가 발견한 "1~2주 뒤 공고 누락"이 다시 생기면 앱 배포와 별개로 즉시 감지한다.
+          MIN_UPCOMING_14_DAYS: "1"
+        run: |
+          set +e
+          details=$(node scripts/validate-notices-response.mjs 2>&1)
+          exit_code=$?
+          set -e
+          echo "$details"
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          {
+            echo "details<<ROBOM_WATCHDOG_OUTPUT"
+            echo "$details"
+            echo "ROBOM_WATCHDOG_OUTPUT"
+          } >> "$GITHUB_OUTPUT"
+      - name: 장애 이슈를 한 번만 생성 또는 재개
+        if: steps.health.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TITLE: "[자동 감시] 청약봄 운영 데이터 이상"
+          DETAILS: ${{ steps.health.outputs.details }}
+        run: |
+          item=$(gh issue list --state all --limit 100 --json number,title,state --jq '.[] | select(.title == "[자동 감시] 청약봄 운영 데이터 이상") | [.number,.state] | @tsv' | head -n 1)
+          number=$(printf '%s' "$item" | cut -f1)
+          state=$(printf '%s' "$item" | cut -f2)
+          body=$(printf '%s\n\n%s\n\n%s\n\n```\n%s\n```\n\n%s\n\n%s' \
+            "자동 감시가 청약봄 공개 데이터의 최신성 또는 무결성 이상을 발견했습니다." \
+            "영향: 앱은 마지막 정상본을 보존하므로 검증되지 않은 자료로 자동 교체하지 않습니다." \
+            "검사 결과" \
+            "$DETAILS" \
+            "복구: 공식 API와 예약 동기화 상태를 확인한 뒤 이 감시가 정상 결과를 받으면 이슈가 자동으로 닫힙니다." \
+            "실행: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID")
+          if [ -z "$number" ]; then
+            gh issue create --title "$TITLE" --body "$body"
+          elif [ "$state" = "CLOSED" ]; then
+            gh issue reopen "$number"
+            gh issue comment "$number" --body "$body"
+          fi
+      - name: 정상 복구 시 감시 이슈 종료
+        if: steps.health.outputs.exit_code == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          number=$(gh issue list --state open --limit 100 --json number,title --jq '.[] | select(.title == "[자동 감시] 청약봄 운영 데이터 이상") | .number' | head -n 1)
+          if [ -n "$number" ]; then
+            gh issue close "$number" --comment "운영 데이터가 다시 최신성·중복·날짜·수집 통계 검증을 모두 통과해 자동으로 종료합니다."
+          fi
+      - name: 이상이면 워크플로 실패 처리
+        if: steps.health.outputs.exit_code != '0'
+        run: exit 1
