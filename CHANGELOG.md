@@ -5,6 +5,7 @@
 - 완성된 0.17.0 AAB의 병합 매니페스트를 독립 검사해 청약봄 기능과 무관한 화면 위 표시·카메라·마이크·구형 외부 저장소 권한이 라이브러리에서 따라오는 문제를 발견했다.
 - Expo 공식 `android.blockedPermissions` 계약으로 불필요한 다섯 권한을 네이티브 매니페스트에서 제거하고, 이후 설정 변경으로 다시 들어오면 빌드를 막는 검증을 추가했다.
 - 제품 버전을 `0.17.1`, Android versionCode를 `24`, iOS buildNumber를 `21`, 서비스워커 캐시를 `zzc-v0.17.1`로 올렸다.
+- GitHub-hosted runner의 Node 20 전환 경고를 제거하도록 checkout·setup-node·pnpm·Pages 공식 Action을 Node 24 기반 최신 고정 SHA로 갱신했다.
 
 ## 0.17.0 (2026-08-08)
 
