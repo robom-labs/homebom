@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "kr.robom.homebom",
-      "versionCode": 18,
+      "versionCode": 19,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#E8F5EA"
