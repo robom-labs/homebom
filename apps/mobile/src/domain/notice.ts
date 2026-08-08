@@ -18,7 +18,7 @@ export type NativeNotice = {
   category: string;
   region: string;
   address: string;
-  supplyCount: number;
+  supplyCount: number | null;
   sourceLabel: string;
   officialUrl: string;
   milestones: readonly NoticeMilestone[];

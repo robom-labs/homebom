@@ -1,12 +1,12 @@
 // 공통 봄 계열의 청약봄 이름과 네이티브 앱 설명을 표시한다.
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { colors } from "../theme";
 
 export function BrandHeader() {
   return (
     <View style={styles.header} accessibilityRole="header">
       <View style={styles.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Text style={styles.markRoof}>⌂</Text>
+        <Image source={require("../../assets/icon.png")} style={styles.markImage} resizeMode="contain" />
       </View>
       <View style={styles.copy}>
         <Text style={styles.wordmark} accessibilityRole="text">청약봄</Text>
@@ -32,11 +32,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#B9DDBF",
   },
-  markRoof: {
-    color: colors.accentDeep,
-    fontSize: 30,
-    fontWeight: "900",
-    lineHeight: 34,
+  markImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
   },
   copy: {
     flex: 1,

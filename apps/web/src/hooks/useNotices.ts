@@ -10,7 +10,7 @@ function prepareNotice(notice: Notice): Notice {
 
 export type NoticeSource = "live" | "stale" | "not-connected";
 const LKG_KEY = "homebom:notices:lkg:v1";
-export const LKG_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+export const LKG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type LastKnownGood = { notices: Notice[]; verifiedAt: string | null; savedAt: string };
 

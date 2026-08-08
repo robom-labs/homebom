@@ -88,7 +88,9 @@ export function nativeNoticeFromCore(notice: Notice): NativeNotice {
     category: categoryLabel(notice),
     region: notice.region,
     address: notice.address ?? notice.region,
-    supplyCount: notice.supplyCount ?? 0,
+    supplyCount: typeof notice.supplyCount === "number" && notice.supplyCount > 0
+      ? notice.supplyCount
+      : null,
     sourceLabel: SOURCE_LABEL,
     officialUrl: notice.noticeUrl ?? notice.applyHomeUrl,
     milestones,

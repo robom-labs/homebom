@@ -60,7 +60,7 @@ describe("last known good notices", () => {
     expect(loadLastKnownNotices()).toBeNull();
   });
 
-  it("72시간이 지난 저장본은 폐기한다", () => {
+  it("7일이 지난 저장본은 폐기한다", () => {
     localStorage.setItem("homebom:notices:lkg:v1", JSON.stringify({
       notices: [{
         id: "future-1",
@@ -73,7 +73,7 @@ describe("last known good notices", () => {
         lastVerifiedAt: "2026-07-13T00:00:00Z",
       }],
       verifiedAt: "2026-07-13T00:00:00Z",
-      savedAt: new Date(Date.now() - 73 * 60 * 60 * 1000).toISOString(),
+      savedAt: new Date(Date.now() - 169 * 60 * 60 * 1000).toISOString(),
     }));
     expect(loadLastKnownNotices()).toBeNull();
   });

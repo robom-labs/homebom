@@ -40,9 +40,10 @@ assert(expo.android.package === "kr.robom.homebom", "Android package가 일치�
 assert(Number.isInteger(expo.android.versionCode) && expo.android.versionCode >= 16, "Android versionCode는 Play 미사용 16 이상이어야 합니다.");
 assert(!(expo.android.permissions ?? []).includes("com.google.android.gms.permission.AD_ID"), "AD_ID 권한을 선언하면 안 됩니다.");
 assert(expo.ios.bundleIdentifier === "kr.robom.homebom", "iOS bundleIdentifier가 일치하지 않습니다.");
-assert(expo.ios.associatedDomains.includes("applinks:robom.kr"), "iOS Universal Link 도메인이 필요합니다.");
+assert(!expo.ios.associatedDomains.includes("applinks:robom.kr"), "검증 파일이 비어 있는 동안 iOS Universal Link를 선언하면 안 됩니다.");
 assert(expo.icon === "./assets/icon.png", "스토어용 앱 아이콘 경로가 필요합니다.");
 assert(expo.android.intentFilters.some((filter) => filter.data?.some((data) => data.scheme === "https" && data.host === "robom.kr" && data.pathPrefix === "/get/homebom")), "Android App Link 경로가 필요합니다.");
+assert(!expo.android.intentFilters.some((filter) => filter.autoVerify === true), "검증 파일이 비어 있는 동안 Android App Link 자동 검증을 켜면 안 됩니다.");
 assert(expo.version === packageJson.version && packageJson.version === rootPackageJson.version, "루트·네이티브 앱 버전이 일치해야 합니다.");
 assert(expo.orientation === "default", "휴대폰·태블릿 회전을 모두 지원해야 합니다.");
 assert(expo.ios.supportsTablet === true, "iPad 지원이 켜져 있어야 합니다.");

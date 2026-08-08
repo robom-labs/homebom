@@ -1,6 +1,6 @@
 // 실공고를 불러와 로딩·연결없음·에러·비어있음·데이터 상태로 보여주고 공고별 관심·알림·링크를 조합한다.
 import { useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from "react-native-safe-area-context";
 import { BrandHeader } from "./src/components/BrandHeader";
@@ -37,9 +37,10 @@ function scheduleFeedback(result: NotificationScheduleResult): string {
 }
 
 export function App() {
-  const { notices, source, error, loading, reload } = useNotices();
+  const { notices, source, error, loading, refreshing, verifiedAt, reload } = useNotices();
   const [interest, setInterest] = useState<Record<string, InterestEntry>>({});
   const [ready, setReady] = useState(false);
+  const [expandedNoticeId, setExpandedNoticeId] = useState<string | null>(null);
 
   // 공고 목록이 준비되면 각 공고의 저장된 관심 여부를 한 번에 읽어 초기 상태를 만든다.
   useEffect(() => {
@@ -115,6 +116,14 @@ export function App() {
           contentContainerStyle={styles.content}
           contentInsetAdjustmentBehavior="never"
           showsVerticalScrollIndicator={false}
+          refreshControl={(
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void reload()}
+              tintColor={colors.accentDeep}
+              colors={[colors.accentDeep]}
+            />
+          )}
         >
           <BrandHeader />
           {loading ? (
@@ -143,6 +152,11 @@ export function App() {
             </StatusCard>
           ) : (
             <View>
+              <View style={styles.feedSummary} accessibilityRole="summary">
+                <Text style={styles.feedCount}>확인 가능한 공고 {notices.length}건</Text>
+                <Text style={styles.feedFreshness}>{formatVerifiedAt(verifiedAt)}</Text>
+                <Text style={styles.feedHint}>아래로 당기면 최신 공고를 다시 확인합니다.</Text>
+              </View>
               {source === "stale" && (
                 <View style={styles.staleBanner}>
                   <Text style={styles.staleText}>
@@ -154,17 +168,25 @@ export function App() {
                 const entry = interest[notice.id] ?? EMPTY_ENTRY;
                 return (
                   <View key={notice.id} style={index > 0 && styles.noticeGap}>
-                    <NoticeOverview notice={notice} />
-                    <NoticeTimeline notice={notice} now={new Date()} />
-                    <InterestControls
-                      interested={entry.interested}
-                      busy={entry.busy}
-                      ready={ready}
-                      feedback={entry.feedback}
-                      onSchedule={() => void handleSchedule(notice)}
-                      onRemove={() => void handleRemove(notice)}
-                      onOpenOfficial={() => void handleOpenOfficial(notice)}
+                    <NoticeOverview
+                      notice={notice}
+                      expanded={expandedNoticeId === notice.id}
+                      onToggle={() => setExpandedNoticeId((current) => current === notice.id ? null : notice.id)}
                     />
+                    {expandedNoticeId === notice.id && (
+                      <>
+                        <NoticeTimeline notice={notice} now={new Date()} />
+                        <InterestControls
+                          interested={entry.interested}
+                          busy={entry.busy}
+                          ready={ready}
+                          feedback={entry.feedback}
+                          onSchedule={() => void handleSchedule(notice)}
+                          onRemove={() => void handleRemove(notice)}
+                          onOpenOfficial={() => void handleOpenOfficial(notice)}
+                        />
+                      </>
+                    )}
                   </View>
                 );
               })}
@@ -174,6 +196,20 @@ export function App() {
       </SafeAreaView>
     </SafeAreaProvider>
   );
+}
+
+const verifiedAtFormatter = new Intl.DateTimeFormat("ko-KR", {
+  month: "long",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "Asia/Seoul",
+});
+
+function formatVerifiedAt(value: string | null): string {
+  if (!value || !Number.isFinite(Date.parse(value))) return "공식 자료 확인 시각을 확인하는 중";
+  return `공식 자료 확인 ${verifiedAtFormatter.format(new Date(value))}`;
 }
 
 function StatusCard({ children }: { children: ReactNode }) {
@@ -214,6 +250,31 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.surface,
     gap: 10,
+  },
+  feedSummary: {
+    marginTop: 18,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.hero,
+  },
+  feedCount: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  feedFreshness: {
+    marginTop: 5,
+    color: colors.accentDeep,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  feedHint: {
+    marginTop: 4,
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   statusTitle: {
     color: colors.ink,

@@ -7,6 +7,12 @@ const REMNDR_DETAIL_OPERATION = "getRemndrLttotPblancDetail";
 const REMNDR_MODEL_OPERATION = "getRemndrLttotPblancMdl";
 const APT_DETAIL_OPERATION = "getAPTLttotPblancDetail";
 const APT_MODEL_OPERATION = "getAPTLttotPblancMdl";
+const URBTY_DETAIL_OPERATION = "getUrbtyOfctlLttotPblancDetail";
+const URBTY_MODEL_OPERATION = "getUrbtyOfctlLttotPblancMdl";
+const PUBLIC_RENT_DETAIL_OPERATION = "getPblPvtRentLttotPblancDetail";
+const PUBLIC_RENT_MODEL_OPERATION = "getPblPvtRentLttotPblancMdl";
+const OPTIONAL_DETAIL_OPERATION = "getOPTLttotPblancDetail";
+const OPTIONAL_MODEL_OPERATION = "getOPTLttotPblancMdl";
 const APPLY_HOME_URL = "https://www.applyhome.co.kr";
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const SNAPSHOT_STALE_AFTER_MS = 90 * 60 * 1000;
@@ -27,12 +33,62 @@ const RECEIPT_NOTE =
   "청약홈 신청 가능 시간은 영업일 09:00~17:30 기준입니다. 공고별 정정·별도 조건은 모집공고 원문을 확인하세요.";
 
 type RawItem = Record<string, unknown>;
-type ApiPage = { data?: RawItem[]; totalCount?: number; currentCount?: number; error?: string };
-type SourceKind = "remndr" | "apt";
+type ApiPage = {
+  data?: RawItem[];
+  totalCount?: number;
+  currentCount?: number;
+  error?: string;
+};
+export type SourceKind =
+  | "remndr"
+  | "apt"
+  | "urbty"
+  | "public-rent"
+  | "optional";
+type DetailSource = {
+  kind: SourceKind;
+  detailOperation: string;
+  modelOperation: string;
+};
+const DETAIL_SOURCES: DetailSource[] = [
+  {
+    kind: "remndr",
+    detailOperation: REMNDR_DETAIL_OPERATION,
+    modelOperation: REMNDR_MODEL_OPERATION,
+  },
+  {
+    kind: "apt",
+    detailOperation: APT_DETAIL_OPERATION,
+    modelOperation: APT_MODEL_OPERATION,
+  },
+  {
+    kind: "urbty",
+    detailOperation: URBTY_DETAIL_OPERATION,
+    modelOperation: URBTY_MODEL_OPERATION,
+  },
+  {
+    kind: "public-rent",
+    detailOperation: PUBLIC_RENT_DETAIL_OPERATION,
+    modelOperation: PUBLIC_RENT_MODEL_OPERATION,
+  },
+  {
+    kind: "optional",
+    detailOperation: OPTIONAL_DETAIL_OPERATION,
+    modelOperation: OPTIONAL_MODEL_OPERATION,
+  },
+];
 type ApplicationEvent = {
   id?: string;
   noticeId?: string;
-  kind: "announce" | "receipt" | "special" | "rank1" | "rank2" | "no-priority" | "winner" | "contract";
+  kind:
+    | "announce"
+    | "receipt"
+    | "special"
+    | "rank1"
+    | "rank2"
+    | "no-priority"
+    | "winner"
+    | "contract";
   label: string;
   start: string;
   end?: string;
@@ -43,7 +99,12 @@ type ApplicationEvent = {
   endTimeConfirmed?: boolean;
   sourceField?: string;
 };
-type ModelCacheRow = { notice_key: string; models: RawItem[]; fetched_at: string; retry_after?: string | null };
+type ModelCacheRow = {
+  notice_key: string;
+  models: RawItem[];
+  fetched_at: string;
+  retry_after?: string | null;
+};
 type LocationCacheRow = {
   notice_key: string;
   raw_address: string;
@@ -63,7 +124,12 @@ type DocumentCacheRow = {
   parsed_fields: Record<string, unknown>;
   provenance: Record<string, unknown>;
   conflicts: unknown[];
-  status: "verified" | "single-official-source" | "conflict" | "not-provided" | "retrying";
+  status:
+    | "verified"
+    | "single-official-source"
+    | "conflict"
+    | "not-provided"
+    | "retrying";
   fetched_at: string;
   document_hash?: string | null;
   revision?: string | null;
@@ -74,7 +140,11 @@ type PublicSnapshotRow = {
   stats: Record<string, unknown>;
   verified_at: string;
 };
-type UpstreamStateRow = { source_key: string; retry_after?: string | null; last_error?: string | null };
+type UpstreamStateRow = {
+  source_key: string;
+  retry_after?: string | null;
+  last_error?: string | null;
+};
 type CollectionStats = {
   fetched: number;
   valid: number;
@@ -83,8 +153,10 @@ type CollectionStats = {
   expired: number;
   cancelled: number;
   modelBlocked: number;
+  modelPending: number;
   preserved: number;
   published: number;
+  sources: Record<string, { fetched: number; active: number }>;
 };
 type CollectionConflict = {
   noticeKey: string;
@@ -94,7 +166,12 @@ type CollectionConflict = {
 
 // 최근 성공 응답. TTL 안에서는 그대로 서빙하고(기존 캐시 동작),
 // TTL이 지나도 지우지 않고 남겨서 업스트림 장애 시 stale-if-error 폴백으로 쓴다.
-let cache: { at: number; body: string; verifiedAt: string } | null = null;
+let cache: {
+  at: number;
+  body: string;
+  verifiedAt: string;
+  collectionStats: string;
+} | null = null;
 
 // IP별 요청 카운터(인스턴스 로컬, best-effort — 위 RATE_LIMIT_MAX 주석 참고).
 const rateBuckets = new Map<string, { windowStart: number; count: number }>();
@@ -105,45 +182,78 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isValidNotice(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) return false;
-  return typeof value.id === "string"
-    && value.id.length > 0
-    && typeof value.houseName === "string"
-    && value.houseName.length > 0
-    && typeof value.region === "string"
-    && Number.isFinite(Date.parse(String(value.receiptStart ?? "")))
-    && Number.isFinite(Date.parse(String(value.receiptEnd ?? "")))
-    && Number.isFinite(Date.parse(String(value.lastVerifiedAt ?? "")))
-    && typeof value.applyHomeUrl === "string";
+  return typeof value.id === "string" &&
+    value.id.length > 0 &&
+    typeof value.houseName === "string" &&
+    value.houseName.length > 0 &&
+    typeof value.region === "string" &&
+    Number.isFinite(Date.parse(String(value.receiptStart ?? ""))) &&
+    Number.isFinite(Date.parse(String(value.receiptEnd ?? ""))) &&
+    Number.isFinite(Date.parse(String(value.lastVerifiedAt ?? ""))) &&
+    typeof value.applyHomeUrl === "string";
 }
 
-function activeNoticeAt(value: unknown, now: number): value is Record<string, unknown> {
-  return isValidNotice(value)
-    && value.cancelled !== true
-    && Date.parse(String(value.receiptEnd)) >= now;
+function activeNoticeAt(
+  value: unknown,
+  now: number,
+): value is Record<string, unknown> {
+  return isValidNotice(value) &&
+    value.cancelled !== true &&
+    Date.parse(String(value.receiptEnd)) >= now;
 }
 
 function activeNotice(value: unknown): value is Record<string, unknown> {
   return activeNoticeAt(value, Date.now());
 }
 
-function activeCachedBody(body: string, now = Date.now()): string | null {
+export function activeCachedBody(
+  body: string,
+  now = Date.now(),
+): string | null {
   try {
     const value = JSON.parse(body) as unknown;
     if (!Array.isArray(value)) return null;
     const active = value.filter((notice) => activeNoticeAt(notice, now));
-    return active.length > 0 ? JSON.stringify(active) : null;
+    return JSON.stringify(active);
   } catch {
     return null;
   }
 }
 
-function headers(status = 200, extra: Record<string, string> = {}): ResponseInit {
+export function collectionStatsHeader(
+  notices: unknown[],
+  rawStats: Record<string, unknown> = {},
+): string {
+  const published = notices.length;
+  const finiteCount = (value: unknown, fallback: number) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0
+      ? Math.trunc(value)
+      : fallback;
+  const valid = Math.max(published, finiteCount(rawStats.valid, published));
+  const fetched = Math.max(valid, finiteCount(rawStats.fetched, valid));
+  return JSON.stringify({
+    published,
+    fetched,
+    valid,
+    preserved: finiteCount(rawStats.preserved, 0),
+    modelPending: finiteCount(rawStats.modelPending, 0),
+    ...(rawStats.sources && typeof rawStats.sources === "object"
+      ? { sources: rawStats.sources }
+      : {}),
+  });
+}
+
+function headers(
+  status = 200,
+  extra: Record<string, string> = {},
+): ResponseInit {
   return {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
-      "access-control-expose-headers": "x-data-stale, x-verified-at, x-collection-stats",
+      "access-control-expose-headers":
+        "x-data-stale, x-verified-at, x-collection-stats",
       ...extra,
     },
   };
@@ -161,7 +271,9 @@ function isRateLimited(ip: string, now: number): boolean {
   // 버킷이 비정상적으로 커지면 만료된 창부터 정리한다(메모리 보호).
   if (rateBuckets.size > RATE_LIMIT_MAX_BUCKETS) {
     for (const [key, bucket] of rateBuckets) {
-      if (now - bucket.windowStart >= RATE_LIMIT_WINDOW_MS) rateBuckets.delete(key);
+      if (now - bucket.windowStart >= RATE_LIMIT_WINDOW_MS) {
+        rateBuckets.delete(key);
+      }
     }
   }
   const bucket = rateBuckets.get(ip);
@@ -186,7 +298,10 @@ function normalizeYmd(value: unknown): string | null {
   const month = Number(match[2]);
   const day = Number(match[3]);
   const utc = new Date(Date.UTC(year, month - 1, day));
-  if (utc.getUTCFullYear() !== year || utc.getUTCMonth() !== month - 1 || utc.getUTCDate() !== day) return null;
+  if (
+    utc.getUTCFullYear() !== year || utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  ) return null;
   return `${match[1]}-${match[2]}-${match[3]}`;
 }
 
@@ -195,13 +310,35 @@ function text(value: unknown): string | undefined {
   return out || undefined;
 }
 
+function hasEnvironmentValue(name: string): boolean {
+  try {
+    return Boolean(Deno.env.get(name));
+  } catch {
+    return false;
+  }
+}
+
 function locationQueries(raw: RawItem): string[] {
   const address = text(raw.HSSPLY_ADRES) ?? "";
-  const withoutParentheses = address.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-  const parenthesized = [...address.matchAll(/\(([^)]*)\)/g)].map((match) => match[1].trim());
-  const withoutExtra = withoutParentheses.replace(/\s+(일원|부근).*$/u, "").trim();
-  const named = [text(raw.HOUSE_NM), text(raw.SUBSCRPT_AREA_CODE_NM)].filter(Boolean).join(" ");
-  return [...new Set([address, ...parenthesized, withoutParentheses, withoutExtra, named].map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean))];
+  const withoutParentheses = address.replace(/\([^)]*\)/g, " ").replace(
+    /\s+/g,
+    " ",
+  ).trim();
+  const parenthesized = [...address.matchAll(/\(([^)]*)\)/g)].map((match) =>
+    match[1].trim()
+  );
+  const withoutExtra = withoutParentheses.replace(/\s+(일원|부근).*$/u, "")
+    .trim();
+  const named = [text(raw.HOUSE_NM), text(raw.SUBSCRPT_AREA_CODE_NM)].filter(
+    Boolean,
+  ).join(" ");
+  return [
+    ...new Set(
+      [address, ...parenthesized, withoutParentheses, withoutExtra, named].map((
+        value,
+      ) => value.replace(/\s+/g, " ").trim()).filter(Boolean),
+    ),
+  ];
 }
 
 function sameRegion(expected?: string, actual?: string): boolean {
@@ -230,12 +367,19 @@ function decodeHtmlEntities(input: string): string {
 function urlText(value: unknown): string | undefined {
   const out = text(value);
   if (!out) return undefined;
-  if (/[\u0000-\u001F\u007F]/.test(out)) return undefined;
+  if (
+    [...out].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code <= 31 || code === 127;
+    })
+  ) return undefined;
   const decoded = decodeHtmlEntities(out);
   const candidate = /^www\./i.test(decoded) ? `https://${decoded}` : decoded;
   try {
     const url = new URL(candidate);
-    if (!url.hostname || (url.protocol !== "https:" && url.protocol !== "http:")) return undefined;
+    if (
+      !url.hostname || (url.protocol !== "https:" && url.protocol !== "http:")
+    ) return undefined;
     return url.toString();
   } catch {
     return undefined;
@@ -252,17 +396,30 @@ function stableIdPart(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
-function noticeIdentity(raw: RawItem, houseName: string, receiptStartYmd: string) {
+function noticeIdentity(
+  raw: RawItem,
+  houseName: string,
+  receiptStartYmd: string,
+) {
   const manageNo = String(raw.HOUSE_MANAGE_NO ?? "").trim();
   const pblancNo = String(raw.PBLANC_NO ?? "").trim();
   const legacyId = `${manageNo}-${pblancNo}`;
-  if (manageNo && pblancNo) return { id: legacyId, legacyIds: undefined, manageNo, pblancNo };
+  if (manageNo && pblancNo) {
+    return { id: legacyId, legacyIds: undefined, manageNo, pblancNo };
+  }
   const id = manageNo
     ? `manage-${stableIdPart(manageNo)}-${receiptStartYmd}`
     : pblancNo
-      ? `pblanc-${stableIdPart(pblancNo)}-${receiptStartYmd}`
-      : `notice-${stableIdPart(houseName)}-${normalizeYmd(raw.RCRIT_PBLANC_DE) ?? receiptStartYmd}-${receiptStartYmd}`;
-  return { id, legacyIds: legacyId ? [legacyId] : undefined, manageNo, pblancNo };
+    ? `pblanc-${stableIdPart(pblancNo)}-${receiptStartYmd}`
+    : `notice-${stableIdPart(houseName)}-${
+      normalizeYmd(raw.RCRIT_PBLANC_DE) ?? receiptStartYmd
+    }-${receiptStartYmd}`;
+  return {
+    id,
+    legacyIds: legacyId ? [legacyId] : undefined,
+    manageNo,
+    pblancNo,
+  };
 }
 
 function positiveNumber(value: unknown): number | undefined {
@@ -281,17 +438,24 @@ function nonNegativeNumber(value: unknown): number | undefined {
 function sameOfficialValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a === undefined || b === undefined) return false;
-  return String(a).normalize("NFKC").replace(/\s+/g, " ").trim()
-    === String(b).normalize("NFKC").replace(/\s+/g, " ").trim();
+  return String(a).normalize("NFKC").replace(/\s+/g, " ").trim() ===
+    String(b).normalize("NFKC").replace(/\s+/g, " ").trim();
 }
 
-function sameOfficialFieldValue(fieldName: string, a: unknown, b: unknown): boolean {
+function sameOfficialFieldValue(
+  fieldName: string,
+  a: unknown,
+  b: unknown,
+): boolean {
   if (sameOfficialValue(a, b)) return true;
   const left = String(a ?? "").normalize("NFKC");
   const right = String(b ?? "").normalize("NFKC");
-  if (fieldName === "contactPhone") return left.replace(/\D/g, "") === right.replace(/\D/g, "");
+  if (fieldName === "contactPhone") {
+    return left.replace(/\D/g, "") === right.replace(/\D/g, "");
+  }
   if (["businessOwnerName", "address"].includes(fieldName)) {
-    const compact = (value: string) => value.replace(/[^0-9a-z가-힣]/giu, "").toLowerCase();
+    const compact = (value: string) =>
+      value.replace(/[^0-9a-z가-힣]/giu, "").toLowerCase();
     return compact(left) === compact(right);
   }
   return false;
@@ -299,12 +463,22 @@ function sameOfficialFieldValue(fieldName: string, a: unknown, b: unknown): bool
 
 function isQuotaError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return /(?:HTTP|API)\s*429|트래픽 허용 횟수|quota|rate.?limit/iu.test(message);
+  return /(?:HTTP|API)\s*429|트래픽 허용 횟수|quota|rate.?limit/iu.test(
+    message,
+  );
 }
 
 function nextKstQuotaReset(now = Date.now()): string {
   const kst = new Date(now + 9 * 60 * 60 * 1000);
-  return new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate() + 1, 0, 10) - 9 * 60 * 60 * 1000).toISOString();
+  return new Date(
+    Date.UTC(
+      kst.getUTCFullYear(),
+      kst.getUTCMonth(),
+      kst.getUTCDate() + 1,
+      0,
+      10,
+    ) - 9 * 60 * 60 * 1000,
+  ).toISOString();
 }
 
 function serviceKeyParam(): string | null {
@@ -328,7 +502,9 @@ async function fetchApiPage(
   url.searchParams.set("perPage", String(PER_PAGE));
   url.searchParams.set("returnType", "JSON");
   url.searchParams.set("serviceKey", serviceKey);
-  for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
+  for (const [name, value] of Object.entries(params)) {
+    url.searchParams.set(name, value);
+  }
   // 업스트림이 응답하지 않으면 FETCH_TIMEOUT_MS 후 중단해 함수 전체가 매달리지 않게 한다.
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -337,22 +513,36 @@ async function fetchApiPage(
     res = await fetch(url, { signal: controller.signal });
   } catch (err) {
     if (controller.signal.aborted) {
-      throw new Error(`청약홈 API 응답이 ${FETCH_TIMEOUT_MS / 1000}초 안에 오지 않아 중단했습니다.`);
+      throw new Error(
+        `청약홈 API 응답이 ${
+          FETCH_TIMEOUT_MS / 1000
+        }초 안에 오지 않아 중단했습니다.`,
+      );
     }
     throw err;
   } finally {
     clearTimeout(timer);
   }
   const body = await res.text();
-  if (!res.ok) throw new Error(`청약홈 API ${res.status}: ${body.slice(0, 180)}`);
+  if (!res.ok) {
+    throw new Error(`청약홈 API ${res.status}: ${body.slice(0, 180)}`);
+  }
   const json = JSON.parse(body) as unknown;
   if (!isRecord(json) || !Array.isArray(json.data)) {
-    throw new Error(isRecord(json) && typeof json.error === "string" ? json.error : "청약홈 API 응답 형식이 올바르지 않습니다.");
+    throw new Error(
+      isRecord(json) && typeof json.error === "string"
+        ? json.error
+        : "청약홈 API 응답 형식이 올바르지 않습니다.",
+    );
   }
   return {
     data: json.data.filter(isRecord),
-    totalCount: typeof json.totalCount === "number" ? json.totalCount : undefined,
-    currentCount: typeof json.currentCount === "number" ? json.currentCount : undefined,
+    totalCount: typeof json.totalCount === "number"
+      ? json.totalCount
+      : undefined,
+    currentCount: typeof json.currentCount === "number"
+      ? json.currentCount
+      : undefined,
   };
 }
 
@@ -365,7 +555,10 @@ async function fetchAll(
   const total = first.totalCount ?? first.data?.length ?? 0;
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
   const rest = await Promise.all(
-    Array.from({ length: pages - 1 }, (_, i) => fetchApiPage(operation, serviceKey, i + 2, params)),
+    Array.from(
+      { length: pages - 1 },
+      (_, i) => fetchApiPage(operation, serviceKey, i + 2, params),
+    ),
   );
   return [first, ...rest].flatMap((page) => page.data ?? []);
 }
@@ -375,6 +568,36 @@ function resolveType(raw: RawItem): "무순위" | "잔여세대" | "불법행위
   const name = `${raw.HOUSE_SECD_NM ?? ""}${raw.HOUSE_NM ?? ""}`;
   if (name.includes("잔여")) return "잔여세대";
   return "무순위";
+}
+
+function noticeTypeFor(
+  raw: RawItem,
+  kind: SourceKind,
+): "일반공급" | "무순위" | "잔여세대" | "임의공급" | "불법행위 재공급" {
+  if (kind === "remndr") return resolveType(raw);
+  if (kind === "optional") return "임의공급";
+  return "일반공급";
+}
+
+function housingCategoryFor(raw: RawItem, kind: SourceKind): string {
+  if (kind === "remndr" || kind === "apt") return "아파트";
+  if (kind === "public-rent") {
+    return text(raw.HOUSE_DETAIL_SECD_NM) ?? "공공지원 민간임대";
+  }
+  if (kind === "urbty") {
+    return text(raw.HOUSE_DTL_SECD_NM) ?? text(raw.HOUSE_SECD_NM) ??
+      "도시형·오피스텔 등";
+  }
+  return text(raw.HOUSE_SECD_NM) ?? "임의공급";
+}
+
+function operationFor(kind: SourceKind): string {
+  return DETAIL_SOURCES.find((source) => source.kind === kind)
+    ?.detailOperation ?? REMNDR_DETAIL_OPERATION;
+}
+
+function primaryReceiptStart(raw: RawItem, kind: SourceKind): unknown {
+  return kind === "apt" ? raw.RCEPT_BGNDE : raw.SUBSCRPT_RCEPT_BGNDE;
 }
 
 function modelKey(raw: RawItem): string {
@@ -431,7 +654,13 @@ function event(
 }
 
 function eventPriority(item: ApplicationEvent): number {
-  const region = { local: 0, gyeonggi: 1, other: 2, all: 3, "not-applicable": 4 }[item.regionScope ?? "not-applicable"];
+  const region = {
+    local: 0,
+    gyeonggi: 1,
+    other: 2,
+    all: 3,
+    "not-applicable": 4,
+  }[item.regionScope ?? "not-applicable"];
   if (item.kind === "special") return 10;
   if (item.kind === "rank1") return 20 + region;
   if (item.kind === "rank2") return 30 + region;
@@ -442,24 +671,194 @@ function eventPriority(item: ApplicationEvent): number {
   return 80;
 }
 
-function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
+export function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
   let candidates: Array<ApplicationEvent | null> = [
-    event("announce", "모집공고", raw.RCRIT_PBLANC_DE, raw.RCRIT_PBLANC_DE, "00:00", "23:59", "RCRIT_PBLANC_DE"),
+    event(
+      "announce",
+      "모집공고",
+      raw.RCRIT_PBLANC_DE,
+      raw.RCRIT_PBLANC_DE,
+      "00:00",
+      "23:59",
+      "RCRIT_PBLANC_DE",
+    ),
     kind === "remndr"
-      ? event("no-priority", "무순위·잔여 접수", raw.SUBSCRPT_RCEPT_BGNDE, raw.SUBSCRPT_RCEPT_ENDDE, "00:00", "23:59", "SUBSCRPT_RCEPT_BGNDE", "all")
-      : event("receipt", "전체 접수 기간", raw.RCEPT_BGNDE, raw.RCEPT_ENDDE, "00:00", "23:59", "RCEPT_BGNDE", "all"),
-    kind === "apt" ? event("special", "특별공급", raw.SPSPLY_RCEPT_BGNDE, raw.SPSPLY_RCEPT_ENDDE, "00:00", "23:59", "SPSPLY_RCEPT_BGNDE", "all") : null,
-    kind === "apt" ? event("rank1", "1순위 해당지역", raw.GNRL_RNK1_CRSPAREA_RCPTDE, raw.GNRL_RNK1_CRSPAREA_ENDDE, "00:00", "23:59", "GNRL_RNK1_CRSPAREA_RCPTDE", "local") : null,
-    kind === "apt" ? event("rank1", "1순위 경기지역", raw.GNRL_RNK1_ETC_GG_RCPTDE, raw.GNRL_RNK1_ETC_GG_ENDDE, "00:00", "23:59", "GNRL_RNK1_ETC_GG_RCPTDE", "gyeonggi") : null,
-    kind === "apt" ? event("rank1", "1순위 기타지역", raw.GNRL_RNK1_ETC_AREA_RCPTDE, raw.GNRL_RNK1_ETC_AREA_ENDDE, "00:00", "23:59", "GNRL_RNK1_ETC_AREA_RCPTDE", "other") : null,
-    kind === "apt" ? event("rank2", "2순위 해당지역", raw.GNRL_RNK2_CRSPAREA_RCPTDE, raw.GNRL_RNK2_CRSPAREA_ENDDE, "00:00", "23:59", "GNRL_RNK2_CRSPAREA_RCPTDE", "local") : null,
-    kind === "apt" ? event("rank2", "2순위 경기지역", raw.GNRL_RNK2_ETC_GG_RCPTDE, raw.GNRL_RNK2_ETC_GG_ENDDE, "00:00", "23:59", "GNRL_RNK2_ETC_GG_RCPTDE", "gyeonggi") : null,
-    kind === "apt" ? event("rank2", "2순위 기타지역", raw.GNRL_RNK2_ETC_AREA_RCPTDE, raw.GNRL_RNK2_ETC_AREA_ENDDE, "00:00", "23:59", "GNRL_RNK2_ETC_AREA_RCPTDE", "other") : null,
-    event("winner", "당첨자 발표", raw.PRZWNER_PRESNATN_DE, raw.PRZWNER_PRESNATN_DE, "00:00", "23:59", "PRZWNER_PRESNATN_DE"),
-    event("contract", "계약", raw.CNTRCT_CNCLS_BGNDE, raw.CNTRCT_CNCLS_ENDDE, "00:00", "23:59", "CNTRCT_CNCLS_BGNDE"),
+      ? event(
+        "no-priority",
+        "무순위·잔여 접수",
+        raw.SUBSCRPT_RCEPT_BGNDE,
+        raw.SUBSCRPT_RCEPT_ENDDE,
+        "00:00",
+        "23:59",
+        "SUBSCRPT_RCEPT_BGNDE",
+        "all",
+      )
+      : kind === "apt"
+      ? event(
+        "receipt",
+        "전체 접수 기간",
+        raw.RCEPT_BGNDE,
+        raw.RCEPT_ENDDE,
+        "00:00",
+        "23:59",
+        "RCEPT_BGNDE",
+        "all",
+      )
+      : event(
+        "receipt",
+        "청약 접수",
+        raw.SUBSCRPT_RCEPT_BGNDE,
+        raw.SUBSCRPT_RCEPT_ENDDE,
+        "00:00",
+        "23:59",
+        "SUBSCRPT_RCEPT_BGNDE",
+        "all",
+      ),
+    kind === "apt"
+      ? event(
+        "special",
+        "특별공급",
+        raw.SPSPLY_RCEPT_BGNDE,
+        raw.SPSPLY_RCEPT_ENDDE,
+        "00:00",
+        "23:59",
+        "SPSPLY_RCEPT_BGNDE",
+        "all",
+      )
+      : null,
+    kind === "apt"
+      ? event(
+        "rank1",
+        "1순위 해당지역",
+        raw.GNRL_RNK1_CRSPAREA_RCPTDE,
+        raw.GNRL_RNK1_CRSPAREA_ENDDE,
+        "00:00",
+        "23:59",
+        "GNRL_RNK1_CRSPAREA_RCPTDE",
+        "local",
+      )
+      : null,
+    kind === "apt"
+      ? event(
+        "rank1",
+        "1순위 경기지역",
+        raw.GNRL_RNK1_ETC_GG_RCPTDE,
+        raw.GNRL_RNK1_ETC_GG_ENDDE,
+        "00:00",
+        "23:59",
+        "GNRL_RNK1_ETC_GG_RCPTDE",
+        "gyeonggi",
+      )
+      : null,
+    kind === "apt"
+      ? event(
+        "rank1",
+        "1순위 기타지역",
+        raw.GNRL_RNK1_ETC_AREA_RCPTDE,
+        raw.GNRL_RNK1_ETC_AREA_ENDDE,
+        "00:00",
+        "23:59",
+        "GNRL_RNK1_ETC_AREA_RCPTDE",
+        "other",
+      )
+      : null,
+    kind === "apt"
+      ? event(
+        "rank2",
+        "2순위 해당지역",
+        raw.GNRL_RNK2_CRSPAREA_RCPTDE,
+        raw.GNRL_RNK2_CRSPAREA_ENDDE,
+        "00:00",
+        "23:59",
+        "GNRL_RNK2_CRSPAREA_RCPTDE",
+        "local",
+      )
+      : null,
+    kind === "apt"
+      ? event(
+        "rank2",
+        "2순위 경기지역",
+        raw.GNRL_RNK2_ETC_GG_RCPTDE,
+        raw.GNRL_RNK2_ETC_GG_ENDDE,
+        "00:00",
+        "23:59",
+        "GNRL_RNK2_ETC_GG_RCPTDE",
+        "gyeonggi",
+      )
+      : null,
+    kind === "apt"
+      ? event(
+        "rank2",
+        "2순위 기타지역",
+        raw.GNRL_RNK2_ETC_AREA_RCPTDE,
+        raw.GNRL_RNK2_ETC_AREA_ENDDE,
+        "00:00",
+        "23:59",
+        "GNRL_RNK2_ETC_AREA_RCPTDE",
+        "other",
+      )
+      : null,
+    kind === "optional"
+      ? event(
+        "special",
+        "특별공급 접수",
+        raw.SPSPLY_RCEPT_BGNDE,
+        raw.SPSPLY_RCEPT_ENDDE,
+        "00:00",
+        "23:59",
+        "SPSPLY_RCEPT_BGNDE",
+        "all",
+      )
+      : null,
+    kind === "optional"
+      ? event(
+        "receipt",
+        "일반공급 접수",
+        raw.GNRL_RCEPT_BGNDE,
+        raw.GNRL_RCEPT_ENDDE,
+        "00:00",
+        "23:59",
+        "GNRL_RCEPT_BGNDE",
+        "all",
+      )
+      : null,
+    event(
+      "winner",
+      "당첨자 발표",
+      raw.PRZWNER_PRESNATN_DE,
+      raw.PRZWNER_PRESNATN_DE,
+      "00:00",
+      "23:59",
+      "PRZWNER_PRESNATN_DE",
+    ),
+    event(
+      "contract",
+      "계약",
+      raw.CNTRCT_CNCLS_BGNDE,
+      raw.CNTRCT_CNCLS_ENDDE,
+      "00:00",
+      "23:59",
+      "CNTRCT_CNCLS_BGNDE",
+    ),
   ];
-  const hasDetailedReceipt = candidates.some((item) => item && ["special", "rank1", "rank2"].includes(item.kind));
-  if (hasDetailedReceipt) candidates = candidates.filter((item) => item?.kind !== "receipt");
+  const hasDetailedReceipt = candidates.some((item) =>
+    item && ["special", "rank1", "rank2"].includes(item.kind)
+  );
+  if (kind === "apt" && hasDetailedReceipt) {
+    candidates = candidates.filter((item) =>
+      item?.sourceField !== "RCEPT_BGNDE"
+    );
+  }
+  if (
+    kind === "optional" &&
+    candidates.some((item) =>
+      item?.sourceField === "GNRL_RCEPT_BGNDE" || item?.kind === "special"
+    )
+  ) {
+    candidates = candidates.filter((item) =>
+      item?.sourceField !== "SUBSCRPT_RCEPT_BGNDE"
+    );
+  }
   const seen = new Set<string>();
   return candidates
     .filter((item): item is ApplicationEvent => item !== null)
@@ -469,7 +868,10 @@ function eventsFor(raw: RawItem, kind: SourceKind): ApplicationEvent[] {
       seen.add(key);
       return true;
     })
-    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start) || eventPriority(a) - eventPriority(b));
+    .sort((a, b) =>
+      Date.parse(a.start) - Date.parse(b.start) ||
+      eventPriority(a) - eventPriority(b)
+    );
 }
 
 function recentAnnouncementCutoff(days = 120): string {
@@ -492,7 +894,7 @@ function kstDateKey(date: Date): string {
   }).format(date);
 }
 
-function normalize(
+export function normalizeNotice(
   raw: RawItem,
   models: RawItem[],
   verifiedAt: string,
@@ -502,20 +904,30 @@ function normalize(
   modelVerifiedAt?: string,
   document?: DocumentCacheRow,
   collectionConflicts: CollectionConflict[] = [],
+  now = Date.now(),
 ) {
   const houseName = text(raw.HOUSE_NM);
   const draftEvents = eventsFor(raw, kind);
   const events = draftEvents;
-  const receiptEvents = events.filter((item) => ["receipt", "special", "rank1", "rank2", "no-priority"].includes(item.kind));
+  const receiptEvents = events.filter((item) =>
+    ["receipt", "special", "rank1", "rank2", "no-priority"].includes(item.kind)
+  );
   if (!houseName || receiptEvents.length === 0) return null;
 
-  const startEvent = receiptEvents.reduce((min, item) => Date.parse(item.start) < Date.parse(min.start) ? item : min);
-  const endEvent = receiptEvents.reduce((max, item) => Date.parse(item.end ?? item.start) > Date.parse(max.end ?? max.start) ? item : max);
+  const startEvent = receiptEvents.reduce((min, item) =>
+    Date.parse(item.start) < Date.parse(min.start) ? item : min
+  );
+  const endEvent = receiptEvents.reduce((max, item) =>
+    Date.parse(item.end ?? item.start) > Date.parse(max.end ?? max.start)
+      ? item
+      : max
+  );
   const receiptEnd = Date.parse(endEvent.end ?? endEvent.start);
-  if (receiptEnd < Date.now()) return null;
-  const startYmd = normalizeYmd(kind === "remndr" ? raw.SUBSCRPT_RCEPT_BGNDE : raw.RCEPT_BGNDE)
-    ?? normalizeYmd(raw.SPSPLY_RCEPT_BGNDE)
-    ?? startEvent.start.slice(0, 10);
+  if (receiptEnd < now) return null;
+  const startYmd = normalizeYmd(primaryReceiptStart(raw, kind)) ??
+    normalizeYmd(raw.SPSPLY_RCEPT_BGNDE) ??
+    normalizeYmd(raw.GNRL_RCEPT_BGNDE) ??
+    startEvent.start.slice(0, 10);
 
   const identity = noticeIdentity(raw, houseName, startYmd);
   const identifiedEvents = events.map((item, index) => ({
@@ -528,22 +940,28 @@ function normalize(
     .map((model) => model.priceMax)
     .filter((price): price is number => typeof price === "number");
 
-  const statusText = [raw.PBLANC_STTUS_NM, raw.PBLANC_STATUS_NM, raw.PBLANC_STAT, raw.PBLANC_STATE]
+  const statusText = [
+    raw.PBLANC_STTUS_NM,
+    raw.PBLANC_STATUS_NM,
+    raw.PBLANC_STAT,
+    raw.PBLANC_STATE,
+  ]
     .map((value) => text(value) ?? "")
     .join(" ");
   const cancelled = /(?:공고\s*)?취소/u.test(statusText);
   if (cancelled) return null;
-  const corrected = /정정/u.test(statusText) || document?.revision?.includes("정정") === true;
+  const corrected = /정정/u.test(statusText) ||
+    document?.revision?.includes("정정") === true;
 
   const base = {
     id: identity.id,
     legacyIds: identity.legacyIds,
     manageNo: identity.manageNo || undefined,
     pblancNo: identity.pblancNo || undefined,
-    type: kind === "apt" ? "일반공급" : resolveType(raw),
+    type: noticeTypeFor(raw, kind),
     officialTypeName: text(raw.HOUSE_SECD_NM),
-    housingCategory: "아파트",
-    sourceOperation: kind === "apt" ? APT_DETAIL_OPERATION : REMNDR_DETAIL_OPERATION,
+    housingCategory: housingCategoryFor(raw, kind),
+    sourceOperation: operationFor(kind),
     houseName,
     region: text(raw.SUBSCRPT_AREA_CODE_NM) || "전국",
     regionCode: text(raw.SUBSCRPT_AREA_CODE),
@@ -567,12 +985,23 @@ function normalize(
     noticeUrl: urlText(raw.PBLANC_URL),
     receiptNote: RECEIPT_NOTE,
     modelSummaries: modelSummaries.length > 0 ? modelSummaries : undefined,
-    modelDataStatus: modelSummaries.length > 0 ? "collected" : modelStatusOverride ?? "not-collected",
-    modelDataVerifiedAt: modelSummaries.length > 0 ? modelVerifiedAt ?? verifiedAt : undefined,
-    latitude: location?.status === "matched" ? location.latitude ?? undefined : undefined,
-    longitude: location?.status === "matched" ? location.longitude ?? undefined : undefined,
+    modelDataStatus: modelSummaries.length > 0
+      ? "collected"
+      : modelStatusOverride ?? "not-collected",
+    modelDataVerifiedAt: modelSummaries.length > 0
+      ? modelVerifiedAt ?? verifiedAt
+      : undefined,
+    latitude: location?.status === "matched"
+      ? location.latitude ?? undefined
+      : undefined,
+    longitude: location?.status === "matched"
+      ? location.longitude ?? undefined
+      : undefined,
     geocodeQuery: location?.query_used ?? undefined,
-    geocodeStatus: location?.status ?? (Deno.env.get("KAKAO_LOCAL_REST_KEY") ? undefined : "not-configured"),
+    geocodeStatus: location?.status ??
+      (hasEnvironmentValue("KAKAO_LOCAL_REST_KEY")
+        ? undefined
+        : "not-configured"),
     events: identifiedEvents,
     corrected,
     cancelled: false,
@@ -580,36 +1009,69 @@ function normalize(
     fieldProvenance: undefined as Record<string, unknown> | undefined,
     verification: {
       noticeApiFetchedAt: verifiedAt,
-      modelApiFetchedAt: modelSummaries.length > 0 ? modelVerifiedAt ?? verifiedAt : undefined,
+      modelApiFetchedAt: modelSummaries.length > 0
+        ? modelVerifiedAt ?? verifiedAt
+        : undefined,
       documentFetchedAt: document?.fetched_at,
     },
   };
 
   const apiSourceUrl = "https://www.data.go.kr/data/15098547/openapi.do";
   const apiFields = [
-    "houseName", "type", "officialTypeName", "region", "address", "supplyCount", "announceDate",
-    "receiptStart", "receiptEnd", "winnerDate", "contractStartDate", "contractEndDate",
-    "officialHomepageUrl", "businessOwnerName", "contactPhone", "moveInMonth", "noticeUrl",
+    "houseName",
+    "type",
+    "officialTypeName",
+    "region",
+    "address",
+    "supplyCount",
+    "announceDate",
+    "receiptStart",
+    "receiptEnd",
+    "winnerDate",
+    "contractStartDate",
+    "contractEndDate",
+    "officialHomepageUrl",
+    "businessOwnerName",
+    "contactPhone",
+    "moveInMonth",
+    "noticeUrl",
   ];
   const baseRecord = base as Record<string, unknown>;
-  base.fieldProvenance = Object.fromEntries(apiFields
-    .filter((field) => baseRecord[field] !== undefined)
-    .map((field) => [field, {
-      sourceType: "applyhome-api",
-      sourceUrl: apiSourceUrl,
-      fetchedAt: verifiedAt,
-      status: "single-official-source",
-    }]));
+  base.fieldProvenance = Object.fromEntries(
+    apiFields
+      .filter((field) => baseRecord[field] !== undefined)
+      .map((field) => [field, {
+        sourceType: "applyhome-api",
+        sourceUrl: apiSourceUrl,
+        fetchedAt: verifiedAt,
+        status: "single-official-source",
+      }]),
+  );
 
-  if (!document || !["verified", "single-official-source"].includes(document.status)) return base;
+  if (
+    !document ||
+    !["verified", "single-official-source"].includes(document.status)
+  ) return base;
   const parsed = document.parsed_fields;
-  const decisionSupport = typeof parsed.decisionSupport === "object" && parsed.decisionSupport !== null
-    ? { ...parsed.decisionSupport as Record<string, unknown>, source: document.source_type, verifiedAt: document.fetched_at }
+  const decisionSupport = typeof parsed.decisionSupport === "object" &&
+      parsed.decisionSupport !== null
+    ? {
+      ...parsed.decisionSupport as Record<string, unknown>,
+      source: document.source_type,
+      verifiedAt: document.fetched_at,
+    }
     : undefined;
   const fieldProvenance = { ...base.fieldProvenance, ...document.provenance };
-  const mergeOfficialField = (fieldName: string, apiValue: unknown, documentValue: unknown): unknown => {
+  const mergeOfficialField = (
+    fieldName: string,
+    apiValue: unknown,
+    documentValue: unknown,
+  ): unknown => {
     if (documentValue === undefined) return apiValue;
-    if (apiValue === undefined || sameOfficialFieldValue(fieldName, apiValue, documentValue)) return documentValue;
+    if (
+      apiValue === undefined ||
+      sameOfficialFieldValue(fieldName, apiValue, documentValue)
+    ) return documentValue;
     if (document.revision?.includes("정정")) return documentValue;
     collectionConflicts.push({
       noticeKey: base.id,
@@ -621,7 +1083,9 @@ function normalize(
     });
     fieldProvenance[fieldName] = {
       sourceType: document.source_type,
-      sourceUrl: (document.provenance[fieldName] as Record<string, unknown> | undefined)?.sourceUrl,
+      sourceUrl:
+        (document.provenance[fieldName] as Record<string, unknown> | undefined)
+          ?.sourceUrl,
       fetchedAt: document.fetched_at,
       documentHash: document.document_hash,
       revision: document.revision,
@@ -629,40 +1093,102 @@ function normalize(
     };
     return undefined;
   };
-  const officialStartTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(parsed.receiptStartTime ?? ""))
-    ? String(parsed.receiptStartTime)
-    : undefined;
-  const officialEndTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(parsed.receiptEndTime ?? ""))
-    ? String(parsed.receiptEndTime)
-    : undefined;
+  const officialStartTime =
+    /^([01]\d|2[0-3]):[0-5]\d$/.test(String(parsed.receiptStartTime ?? ""))
+      ? String(parsed.receiptStartTime)
+      : undefined;
+  const officialEndTime =
+    /^([01]\d|2[0-3]):[0-5]\d$/.test(String(parsed.receiptEndTime ?? ""))
+      ? String(parsed.receiptEndTime)
+      : undefined;
   const correctedEvents = base.events.map((item) => {
-    if (!["receipt", "special", "rank1", "rank2", "no-priority"].includes(item.kind)) return item;
+    if (
+      !["receipt", "special", "rank1", "rank2", "no-priority"].includes(
+        item.kind,
+      )
+    ) return item;
     return {
       ...item,
-      start: officialStartTime ? kstDateToUtcIso(kstDateKey(new Date(item.start)), officialStartTime) : item.start,
-      end: officialEndTime ? kstDateToUtcIso(kstDateKey(new Date(item.end ?? item.start)), officialEndTime) : item.end,
-      timeSource: officialStartTime && officialEndTime ? "official" : item.timeSource,
+      start: officialStartTime
+        ? kstDateToUtcIso(kstDateKey(new Date(item.start)), officialStartTime)
+        : item.start,
+      end: officialEndTime
+        ? kstDateToUtcIso(
+          kstDateKey(new Date(item.end ?? item.start)),
+          officialEndTime,
+        )
+        : item.end,
+      timeSource: officialStartTime && officialEndTime
+        ? "official"
+        : item.timeSource,
       startTimeConfirmed: Boolean(officialStartTime),
       endTimeConfirmed: Boolean(officialEndTime),
       confirmed: Boolean(officialStartTime && officialEndTime),
     };
   });
-  const correctedReceiptEvents = correctedEvents.filter((item) => ["receipt", "special", "rank1", "rank2", "no-priority"].includes(item.kind));
+  const correctedReceiptEvents = correctedEvents.filter((item) =>
+    ["receipt", "special", "rank1", "rank2", "no-priority"].includes(item.kind)
+  );
   return {
     ...base,
-    supplyCount: mergeOfficialField("supplyCount", base.supplyCount, nonNegativeNumber(parsed.supplyCount)),
+    supplyCount: mergeOfficialField(
+      "supplyCount",
+      base.supplyCount,
+      nonNegativeNumber(parsed.supplyCount),
+    ),
     address: mergeOfficialField("address", base.address, text(parsed.address)),
-    contractStartDate: mergeOfficialField("contractStartDate", base.contractStartDate, normalizeYmd(parsed.contractStartDate) ?? undefined),
-    contractEndDate: mergeOfficialField("contractEndDate", base.contractEndDate, normalizeYmd(parsed.contractEndDate) ?? undefined),
-    moveInMonth: mergeOfficialField("moveInMonth", base.moveInMonth, text(parsed.moveInMonth)),
-    businessOwnerName: mergeOfficialField("businessOwnerName", base.businessOwnerName, text(parsed.businessOwnerName)),
-    contactPhone: mergeOfficialField("contactPhone", base.contactPhone, text(parsed.contactPhone)),
+    contractStartDate: mergeOfficialField(
+      "contractStartDate",
+      base.contractStartDate,
+      normalizeYmd(parsed.contractStartDate) ?? undefined,
+    ),
+    contractEndDate: mergeOfficialField(
+      "contractEndDate",
+      base.contractEndDate,
+      normalizeYmd(parsed.contractEndDate) ?? undefined,
+    ),
+    moveInMonth: mergeOfficialField(
+      "moveInMonth",
+      base.moveInMonth,
+      text(parsed.moveInMonth),
+    ),
+    businessOwnerName: mergeOfficialField(
+      "businessOwnerName",
+      base.businessOwnerName,
+      text(parsed.businessOwnerName),
+    ),
+    contactPhone: mergeOfficialField(
+      "contactPhone",
+      base.contactPhone,
+      text(parsed.contactPhone),
+    ),
     decisionSupport,
     fieldProvenance,
     events: correctedEvents,
-    receiptStart: correctedReceiptEvents.reduce((min, item) => Date.parse(item.start) < Date.parse(min) ? item.start : min, correctedReceiptEvents[0]?.start ?? base.receiptStart),
-    receiptEnd: correctedReceiptEvents.reduce((max, item) => Date.parse(item.end ?? item.start) > Date.parse(max) ? item.end ?? item.start : max, correctedReceiptEvents[0]?.end ?? correctedReceiptEvents[0]?.start ?? base.receiptEnd),
+    receiptStart: correctedReceiptEvents.reduce(
+      (min, item) =>
+        Date.parse(item.start) < Date.parse(min) ? item.start : min,
+      correctedReceiptEvents[0]?.start ?? base.receiptStart,
+    ),
+    receiptEnd: correctedReceiptEvents.reduce(
+      (max, item) =>
+        Date.parse(item.end ?? item.start) > Date.parse(max)
+          ? item.end ?? item.start
+          : max,
+      correctedReceiptEvents[0]?.end ?? correctedReceiptEvents[0]?.start ??
+        base.receiptEnd,
+    ),
   };
+}
+
+export function publishableNotices(
+  normalized: Array<ReturnType<typeof normalizeNotice>>,
+  now = Date.now(),
+) {
+  return normalized
+    .filter((notice): notice is NonNullable<typeof notice> => notice !== null)
+    .filter((notice) => activeNoticeAt(notice, now))
+    .sort((a, b) => Date.parse(a.receiptStart) - Date.parse(b.receiptStart));
 }
 
 function supabaseCredentials(): { url: string; serviceRole: string } | null {
@@ -692,21 +1218,31 @@ async function readRestRows<T>(path: string): Promise<T[]> {
 }
 
 async function readModelCache(): Promise<Map<string, ModelCacheRow>> {
-  const rows = await readRestRows<ModelCacheRow>("notice_model_cache?select=notice_key,models,fetched_at,retry_after&order=notice_key.asc");
+  const rows = await readRestRows<ModelCacheRow>(
+    "notice_model_cache?select=notice_key,models,fetched_at,retry_after&order=notice_key.asc",
+  );
   return new Map(rows.map((row) => [row.notice_key, row]));
 }
 
 async function readDocumentCache(): Promise<Map<string, DocumentCacheRow>> {
-  const rows = await readRestRows<DocumentCacheRow>("notice_document_cache?select=notice_key,source_type,parsed_fields,provenance,conflicts,status,fetched_at,document_hash,revision&order=notice_key.asc");
+  const rows = await readRestRows<DocumentCacheRow>(
+    "notice_document_cache?select=notice_key,source_type,parsed_fields,provenance,conflicts,status,fetched_at,document_hash,revision&order=notice_key.asc",
+  );
   return new Map(rows.map((row) => [row.notice_key, row]));
 }
 
 async function readPublicSnapshot(): Promise<PublicSnapshotRow | null> {
   const credentials = supabaseCredentials();
   if (!credentials) return null;
-  const res = await fetch(`${credentials.url}/rest/v1/notice_public_snapshots?feed_key=eq.active&select=feed_key,notices,stats,verified_at&limit=1`, {
-    headers: { apikey: credentials.serviceRole, authorization: `Bearer ${credentials.serviceRole}` },
-  });
+  const res = await fetch(
+    `${credentials.url}/rest/v1/notice_public_snapshots?feed_key=eq.active&select=feed_key,notices,stats,verified_at&limit=1`,
+    {
+      headers: {
+        apikey: credentials.serviceRole,
+        authorization: `Bearer ${credentials.serviceRole}`,
+      },
+    },
+  );
   if (!res.ok) throw new Error(`공개 스냅샷 조회 실패 ${res.status}`);
   const rows = await res.json() as PublicSnapshotRow[];
   return rows[0] ?? null;
@@ -715,27 +1251,44 @@ async function readPublicSnapshot(): Promise<PublicSnapshotRow | null> {
 async function readUpstreamState(): Promise<UpstreamStateRow | null> {
   const credentials = supabaseCredentials();
   if (!credentials) return null;
-  const res = await fetch(`${credentials.url}/rest/v1/notice_upstream_state?source_key=eq.applyhome&select=source_key,retry_after,last_error&limit=1`, {
-    headers: { apikey: credentials.serviceRole, authorization: `Bearer ${credentials.serviceRole}` },
-  });
+  const res = await fetch(
+    `${credentials.url}/rest/v1/notice_upstream_state?source_key=eq.applyhome&select=source_key,retry_after,last_error&limit=1`,
+    {
+      headers: {
+        apikey: credentials.serviceRole,
+        authorization: `Bearer ${credentials.serviceRole}`,
+      },
+    },
+  );
   if (!res.ok) throw new Error(`업스트림 상태 조회 실패 ${res.status}`);
   const rows = await res.json() as UpstreamStateRow[];
   return rows[0] ?? null;
 }
 
-async function writeUpstreamState(retryAfter: string | null, lastError: string | null): Promise<void> {
+async function writeUpstreamState(
+  retryAfter: string | null,
+  lastError: string | null,
+): Promise<void> {
   const credentials = supabaseCredentials();
   if (!credentials) return;
-  const res = await fetch(`${credentials.url}/rest/v1/notice_upstream_state?on_conflict=source_key`, {
-    method: "POST",
-    headers: {
-      apikey: credentials.serviceRole,
-      authorization: `Bearer ${credentials.serviceRole}`,
-      "content-type": "application/json",
-      prefer: "resolution=merge-duplicates,return=minimal",
+  const res = await fetch(
+    `${credentials.url}/rest/v1/notice_upstream_state?on_conflict=source_key`,
+    {
+      method: "POST",
+      headers: {
+        apikey: credentials.serviceRole,
+        authorization: `Bearer ${credentials.serviceRole}`,
+        "content-type": "application/json",
+        prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        source_key: "applyhome",
+        retry_after: retryAfter,
+        last_error: lastError,
+        updated_at: new Date().toISOString(),
+      }),
     },
-    body: JSON.stringify({ source_key: "applyhome", retry_after: retryAfter, last_error: lastError, updated_at: new Date().toISOString() }),
-  });
+  );
   if (!res.ok) throw new Error(`업스트림 상태 저장 실패 ${res.status}`);
 }
 
@@ -743,51 +1296,85 @@ async function authorizedRefresh(req: Request): Promise<boolean> {
   const provided = req.headers.get("x-sync-token");
   const credentials = supabaseCredentials();
   if (!provided || !credentials) return false;
-  const res = await fetch(`${credentials.url}/rest/v1/notice_sync_auth?singleton=eq.true&select=token_hash&limit=1`, {
-    headers: { apikey: credentials.serviceRole, authorization: `Bearer ${credentials.serviceRole}` },
-  });
+  const res = await fetch(
+    `${credentials.url}/rest/v1/notice_sync_auth?singleton=eq.true&select=token_hash&limit=1`,
+    {
+      headers: {
+        apikey: credentials.serviceRole,
+        authorization: `Bearer ${credentials.serviceRole}`,
+      },
+    },
+  );
   if (!res.ok) return false;
   const rows = await res.json() as Array<{ token_hash?: string }>;
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(provided));
-  const actual = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(provided),
+  );
+  const actual = [...new Uint8Array(digest)].map((byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
   return Boolean(rows[0]?.token_hash) && actual === rows[0]?.token_hash;
 }
 
-async function writePublicSnapshot(notices: unknown[], stats: CollectionStats, verifiedAt: string): Promise<void> {
+async function writePublicSnapshot(
+  notices: unknown[],
+  stats: CollectionStats,
+  verifiedAt: string,
+): Promise<void> {
   const credentials = supabaseCredentials();
   if (!credentials || notices.length === 0) return;
-  const historyRes = await fetch(`${credentials.url}/rest/v1/notice_public_snapshot_history`, {
-    method: "POST",
-    headers: {
-      apikey: credentials.serviceRole,
-      authorization: `Bearer ${credentials.serviceRole}`,
-      "content-type": "application/json",
-      prefer: "return=minimal",
+  const historyRes = await fetch(
+    `${credentials.url}/rest/v1/notice_public_snapshot_history`,
+    {
+      method: "POST",
+      headers: {
+        apikey: credentials.serviceRole,
+        authorization: `Bearer ${credentials.serviceRole}`,
+        "content-type": "application/json",
+        prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        feed_key: "active",
+        notices,
+        stats,
+        verified_at: verifiedAt,
+      }),
     },
-    body: JSON.stringify({ feed_key: "active", notices, stats, verified_at: verifiedAt }),
-  });
-  if (!historyRes.ok) throw new Error(`공개 스냅샷 이력 저장 실패 ${historyRes.status}`);
-  const res = await fetch(`${credentials.url}/rest/v1/notice_public_snapshots?on_conflict=feed_key`, {
-    method: "POST",
-    headers: {
-      apikey: credentials.serviceRole,
-      authorization: `Bearer ${credentials.serviceRole}`,
-      "content-type": "application/json",
-      prefer: "resolution=merge-duplicates,return=minimal",
+  );
+  if (!historyRes.ok) {
+    throw new Error(`공개 스냅샷 이력 저장 실패 ${historyRes.status}`);
+  }
+  const res = await fetch(
+    `${credentials.url}/rest/v1/notice_public_snapshots?on_conflict=feed_key`,
+    {
+      method: "POST",
+      headers: {
+        apikey: credentials.serviceRole,
+        authorization: `Bearer ${credentials.serviceRole}`,
+        "content-type": "application/json",
+        prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        feed_key: "active",
+        notices,
+        stats,
+        verified_at: verifiedAt,
+        source_versions: {
+          applyhome: "ApplyhomeInfoDetailSvc/v1",
+          contract: "homebom-v3",
+        },
+        updated_at: verifiedAt,
+      }),
     },
-    body: JSON.stringify({
-      feed_key: "active",
-      notices,
-      stats,
-      verified_at: verifiedAt,
-      source_versions: { applyhome: "ApplyhomeInfoDetailSvc/v1", contract: "homebom-v2" },
-      updated_at: verifiedAt,
-    }),
-  });
+  );
   if (!res.ok) throw new Error(`공개 스냅샷 저장 실패 ${res.status}`);
 }
 
-async function reconcileCollectionConflicts(activeNoticeIds: string[], conflicts: CollectionConflict[]): Promise<void> {
+async function reconcileCollectionConflicts(
+  activeNoticeIds: string[],
+  conflicts: CollectionConflict[],
+): Promise<void> {
   const credentials = supabaseCredentials();
   if (!credentials) return;
   const rows = conflicts.map((conflict) => ({
@@ -799,7 +1386,72 @@ async function reconcileCollectionConflicts(activeNoticeIds: string[], conflicts
     resolution: null,
   }));
   if (rows.length > 0) {
-    const res = await fetch(`${credentials.url}/rest/v1/notice_collection_conflicts?on_conflict=notice_key,field_name`, {
+    const res = await fetch(
+      `${credentials.url}/rest/v1/notice_collection_conflicts?on_conflict=notice_key,field_name`,
+      {
+        method: "POST",
+        headers: {
+          apikey: credentials.serviceRole,
+          authorization: `Bearer ${credentials.serviceRole}`,
+          "content-type": "application/json",
+          prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(rows),
+      },
+    );
+    if (!res.ok) throw new Error(`공식 출처 충돌 저장 실패 ${res.status}`);
+  }
+
+  if (activeNoticeIds.length === 0) return;
+  const openRows = await readRestRows<
+    { id: number; notice_key: string; field_name: string }
+  >(
+    "notice_collection_conflicts?resolved_at=is.null&select=id,notice_key,field_name&order=id.asc",
+  );
+  const current = new Set(
+    conflicts.map((item) => `${item.noticeKey}\u0000${item.fieldName}`),
+  );
+  const resolvedAt = new Date().toISOString();
+  const active = new Set(activeNoticeIds);
+  await Promise.all(
+    openRows.filter((row) =>
+      !current.has(`${row.notice_key}\u0000${row.field_name}`)
+    ).map(async (row) => {
+      const res = await fetch(
+        `${credentials.url}/rest/v1/notice_collection_conflicts?id=eq.${row.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            apikey: credentials.serviceRole,
+            authorization: `Bearer ${credentials.serviceRole}`,
+            "content-type": "application/json",
+            prefer: "return=minimal",
+          },
+          body: JSON.stringify({
+            resolved_at: resolvedAt,
+            resolution: {
+              status: active.has(row.notice_key)
+                ? "official-sources-agree"
+                : "notice-no-longer-published",
+            },
+          }),
+        },
+      );
+      if (!res.ok) {
+        throw new Error(`공식 출처 충돌 해소 기록 실패 ${res.status}`);
+      }
+    }),
+  );
+}
+
+async function writeModelCache(
+  row: ModelCacheRow & { last_error?: string | null },
+): Promise<void> {
+  const credentials = supabaseCredentials();
+  if (!credentials) return;
+  const res = await fetch(
+    `${credentials.url}/rest/v1/notice_model_cache?on_conflict=notice_key`,
+    {
       method: "POST",
       headers: {
         apikey: credentials.serviceRole,
@@ -807,70 +1459,35 @@ async function reconcileCollectionConflicts(activeNoticeIds: string[], conflicts
         "content-type": "application/json",
         prefer: "resolution=merge-duplicates,return=minimal",
       },
-      body: JSON.stringify(rows),
-    });
-    if (!res.ok) throw new Error(`공식 출처 충돌 저장 실패 ${res.status}`);
-  }
-
-  if (activeNoticeIds.length === 0) return;
-  const openRows = await readRestRows<{ id: number; notice_key: string; field_name: string }>(
-    "notice_collection_conflicts?resolved_at=is.null&select=id,notice_key,field_name&order=id.asc",
-  );
-  const current = new Set(conflicts.map((item) => `${item.noticeKey}\u0000${item.fieldName}`));
-  const resolvedAt = new Date().toISOString();
-  const active = new Set(activeNoticeIds);
-  await Promise.all(openRows.filter((row) => !current.has(`${row.notice_key}\u0000${row.field_name}`)).map(async (row) => {
-    const res = await fetch(`${credentials.url}/rest/v1/notice_collection_conflicts?id=eq.${row.id}`, {
-      method: "PATCH",
-      headers: {
-        apikey: credentials.serviceRole,
-        authorization: `Bearer ${credentials.serviceRole}`,
-        "content-type": "application/json",
-        prefer: "return=minimal",
-      },
-      body: JSON.stringify({
-        resolved_at: resolvedAt,
-        resolution: { status: active.has(row.notice_key) ? "official-sources-agree" : "notice-no-longer-published" },
-      }),
-    });
-    if (!res.ok) throw new Error(`공식 출처 충돌 해소 기록 실패 ${res.status}`);
-  }));
-}
-
-async function writeModelCache(row: ModelCacheRow & { last_error?: string | null }): Promise<void> {
-  const credentials = supabaseCredentials();
-  if (!credentials) return;
-  const res = await fetch(`${credentials.url}/rest/v1/notice_model_cache?on_conflict=notice_key`, {
-    method: "POST",
-    headers: {
-      apikey: credentials.serviceRole,
-      authorization: `Bearer ${credentials.serviceRole}`,
-      "content-type": "application/json",
-      prefer: "resolution=merge-duplicates,return=minimal",
+      body: JSON.stringify(row),
     },
-    body: JSON.stringify(row),
-  });
+  );
   if (!res.ok) throw new Error(`주택형 캐시 저장 실패 ${res.status}`);
 }
 
 async function readLocationCache(): Promise<Map<string, LocationCacheRow>> {
-  const rows = await readRestRows<LocationCacheRow>("notice_location_cache?select=*&order=notice_key.asc");
+  const rows = await readRestRows<LocationCacheRow>(
+    "notice_location_cache?select=*&order=notice_key.asc",
+  );
   return new Map(rows.map((row) => [row.notice_key, row]));
 }
 
 async function writeLocationCache(row: LocationCacheRow): Promise<void> {
   const credentials = supabaseCredentials();
   if (!credentials) return;
-  const res = await fetch(`${credentials.url}/rest/v1/notice_location_cache?on_conflict=notice_key`, {
-    method: "POST",
-    headers: {
-      apikey: credentials.serviceRole,
-      authorization: `Bearer ${credentials.serviceRole}`,
-      "content-type": "application/json",
-      prefer: "resolution=merge-duplicates,return=minimal",
+  const res = await fetch(
+    `${credentials.url}/rest/v1/notice_location_cache?on_conflict=notice_key`,
+    {
+      method: "POST",
+      headers: {
+        apikey: credentials.serviceRole,
+        authorization: `Bearer ${credentials.serviceRole}`,
+        "content-type": "application/json",
+        prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(row),
     },
-    body: JSON.stringify(row),
-  });
+  );
   if (!res.ok) throw new Error(`위치 캐시 저장 실패 ${res.status}`);
 }
 
@@ -884,12 +1501,30 @@ async function refreshLocationCache(items: RawItem[]): Promise<void> {
     let matched: LocationCacheRow | null = null;
     try {
       for (const query of locationQueries(raw)) {
-        const url = new URL("https://dapi.kakao.com/v2/local/search/address.json");
+        const url = new URL(
+          "https://dapi.kakao.com/v2/local/search/address.json",
+        );
         url.searchParams.set("query", query);
-        const res = await fetch(url, { headers: { authorization: `KakaoAK ${kakaoKey}` } });
+        const res = await fetch(url, {
+          headers: { authorization: `KakaoAK ${kakaoKey}` },
+        });
         if (!res.ok) throw new Error(`Kakao Local ${res.status}`);
-        const body = await res.json() as { documents?: Array<{ x: string; y: string; address_name?: string; address?: { region_1depth_name?: string } }> };
-        const document = body.documents?.find((item) => sameRegion(text(raw.SUBSCRPT_AREA_CODE_NM), item.address?.region_1depth_name));
+        const body = await res.json() as {
+          documents?: Array<
+            {
+              x: string;
+              y: string;
+              address_name?: string;
+              address?: { region_1depth_name?: string };
+            }
+          >;
+        };
+        const document = body.documents?.find((item) =>
+          sameRegion(
+            text(raw.SUBSCRPT_AREA_CODE_NM),
+            item.address?.region_1depth_name,
+          )
+        );
         if (!document) continue;
         matched = {
           notice_key: key,
@@ -906,15 +1541,17 @@ async function refreshLocationCache(items: RawItem[]): Promise<void> {
         };
         break;
       }
-      await writeLocationCache(matched ?? {
-        notice_key: key,
-        raw_address: rawAddress,
-        status: "not-found",
-        provider: "kakao-local",
-        fetched_at: new Date().toISOString(),
-        retry_after: new Date(Date.now() + LOCATION_RETRY_MS).toISOString(),
-        last_error: "주소 후보에서 지역이 일치하는 좌표를 찾지 못함",
-      });
+      await writeLocationCache(
+        matched ?? {
+          notice_key: key,
+          raw_address: rawAddress,
+          status: "not-found",
+          provider: "kakao-local",
+          fetched_at: new Date().toISOString(),
+          retry_after: new Date(Date.now() + LOCATION_RETRY_MS).toISOString(),
+          last_error: "주소 후보에서 지역이 일치하는 좌표를 찾지 못함",
+        },
+      );
     } catch (error) {
       await writeLocationCache({
         notice_key: key,
@@ -923,82 +1560,147 @@ async function refreshLocationCache(items: RawItem[]): Promise<void> {
         provider: "kakao-local",
         fetched_at: new Date().toISOString(),
         retry_after: new Date(Date.now() + LOCATION_RETRY_MS).toISOString(),
-        last_error: error instanceof Error ? error.message.slice(0, 500) : "unknown",
+        last_error: error instanceof Error
+          ? error.message.slice(0, 500)
+          : "unknown",
       }).catch(() => {});
     }
   }
 }
 
-function relevantAptDetails(items: RawItem[]): RawItem[] {
-  const now = Date.now();
+function relevantDetails(
+  items: RawItem[],
+  kind: SourceKind,
+  now = Date.now(),
+): RawItem[] {
   const [year, month] = kstDateKey(new Date(now)).split("-").map(Number);
   const nextMonthEnd = Date.UTC(year, month + 1, 1) - 9 * 60 * 60 * 1000 - 1;
   return items.filter((raw) => {
-    const events = eventsFor(raw, "apt").filter((item) => ["receipt", "special", "rank1", "rank2"].includes(item.kind));
+    const events = eventsFor(raw, kind).filter((item) =>
+      ["receipt", "special", "rank1", "rank2", "no-priority"].includes(
+        item.kind,
+      )
+    );
     if (events.length === 0) return false;
     const start = Math.min(...events.map((item) => Date.parse(item.start)));
-    const end = Math.max(...events.map((item) => Date.parse(item.end ?? item.start)));
+    const end = Math.max(
+      ...events.map((item) => Date.parse(item.end ?? item.start)),
+    );
     return end >= now && start <= nextMonthEnd;
   });
 }
 
-function rawCollectionStatus(raw: RawItem, kind: SourceKind, now = Date.now()): { cancelled: boolean; expired: boolean } {
-  const statusText = [raw.PBLANC_STTUS_NM, raw.PBLANC_STATUS_NM, raw.PBLANC_STAT, raw.PBLANC_STATE]
+function rawCollectionStatus(
+  raw: RawItem,
+  kind: SourceKind,
+  now = Date.now(),
+): { cancelled: boolean; expired: boolean } {
+  const statusText = [
+    raw.PBLANC_STTUS_NM,
+    raw.PBLANC_STATUS_NM,
+    raw.PBLANC_STAT,
+    raw.PBLANC_STATE,
+  ]
     .map((value) => text(value) ?? "")
     .join(" ");
   const cancelled = /(?:공고\s*)?취소/u.test(statusText);
-  const receiptEvents = eventsFor(raw, kind).filter((item) => ["receipt", "special", "rank1", "rank2", "no-priority"].includes(item.kind));
+  const receiptEvents = eventsFor(raw, kind).filter((item) =>
+    ["receipt", "special", "rank1", "rank2", "no-priority"].includes(item.kind)
+  );
   const receiptEnd = receiptEvents.length > 0
-    ? Math.max(...receiptEvents.map((item) => Date.parse(item.end ?? item.start)))
+    ? Math.max(
+      ...receiptEvents.map((item) => Date.parse(item.end ?? item.start)),
+    )
     : Number.NaN;
-  return { cancelled, expired: Number.isFinite(receiptEnd) && receiptEnd < now };
+  return {
+    cancelled,
+    expired: Number.isFinite(receiptEnd) && receiptEnd < now,
+  };
 }
 
-async function refreshAptModelCache(serviceKey: string, items: RawItem[]): Promise<void> {
+async function refreshModelCache(
+  serviceKey: string,
+  items: Array<{ raw: RawItem; source: DetailSource }>,
+): Promise<void> {
   const queue = [...items];
-  const workers = Array.from({ length: Math.min(2, queue.length) }, async () => {
-    for (;;) {
-      const raw = queue.shift();
-      if (!raw) return;
-      const key = modelKey(raw);
-      const manageNo = text(raw.HOUSE_MANAGE_NO);
-      const pblancNo = text(raw.PBLANC_NO);
-      if (!manageNo || !pblancNo) continue;
-      try {
-        const models = await fetchAll(APT_MODEL_OPERATION, serviceKey, {
-          "cond[HOUSE_MANAGE_NO::EQ]": manageNo,
-          "cond[PBLANC_NO::EQ]": pblancNo,
-        });
-        await writeModelCache({ notice_key: key, models, fetched_at: new Date().toISOString(), retry_after: null, last_error: null });
-      } catch (error) {
-        const retryAfter = isQuotaError(error) ? nextKstQuotaReset() : new Date(Date.now() + MODEL_RETRY_MS).toISOString();
-        await writeModelCache({
-          notice_key: key,
-          models: [],
-          fetched_at: new Date(0).toISOString(),
-          retry_after: retryAfter,
-          last_error: error instanceof Error ? error.message.slice(0, 500) : "unknown",
-        }).catch(() => {});
-        if (isQuotaError(error)) {
-          await writeUpstreamState(retryAfter, error instanceof Error ? error.message.slice(0, 500) : "quota exceeded").catch(() => {});
-          return;
+  const workers = Array.from(
+    { length: Math.min(2, queue.length) },
+    async () => {
+      for (;;) {
+        const target = queue.shift();
+        if (!target) return;
+        const { raw, source } = target;
+        const key = modelKey(raw);
+        const manageNo = text(raw.HOUSE_MANAGE_NO);
+        const pblancNo = text(raw.PBLANC_NO);
+        if (!manageNo || !pblancNo) continue;
+        try {
+          const models = await fetchAll(source.modelOperation, serviceKey, {
+            "cond[HOUSE_MANAGE_NO::EQ]": manageNo,
+            "cond[PBLANC_NO::EQ]": pblancNo,
+          });
+          await writeModelCache({
+            notice_key: key,
+            models,
+            fetched_at: new Date().toISOString(),
+            retry_after: null,
+            last_error: null,
+          });
+        } catch (error) {
+          const retryAfter = isQuotaError(error)
+            ? nextKstQuotaReset()
+            : new Date(Date.now() + MODEL_RETRY_MS).toISOString();
+          await writeModelCache({
+            notice_key: key,
+            models: [],
+            fetched_at: new Date(0).toISOString(),
+            retry_after: retryAfter,
+            last_error: error instanceof Error
+              ? error.message.slice(0, 500)
+              : "unknown",
+          }).catch(() => {});
+          if (isQuotaError(error)) return;
         }
       }
-    }
-  });
+    },
+  );
   await Promise.all(workers);
 }
 
+async function fetchDetailRows(
+  serviceKey: string,
+  params: Record<string, string>,
+): Promise<Map<SourceKind, RawItem[]>> {
+  const queue = [...DETAIL_SOURCES];
+  const rows = new Map<SourceKind, RawItem[]>();
+  const workers = Array.from({ length: 2 }, async () => {
+    for (;;) {
+      const source = queue.shift();
+      if (!source) return;
+      rows.set(
+        source.kind,
+        await fetchAll(source.detailOperation, serviceKey, params),
+      );
+    }
+  });
+  await Promise.all(workers);
+  return rows;
+}
+
 function runInBackground(task: Promise<void>): void {
-  const runtime = (globalThis as unknown as { EdgeRuntime?: { waitUntil?: (promise: Promise<void>) => void } }).EdgeRuntime;
+  const runtime = (globalThis as unknown as {
+    EdgeRuntime?: { waitUntil?: (promise: Promise<void>) => void };
+  }).EdgeRuntime;
   if (runtime?.waitUntil) runtime.waitUntil(task);
   else void task;
 }
 
-Deno.serve(async (req) => {
+export async function handleRequest(req: Request): Promise<Response> {
   if (isRateLimited(clientIp(req), Date.now())) {
     return new Response(
-      JSON.stringify({ error: "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요." }),
+      JSON.stringify({
+        error: "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+      }),
       headers(429, { "retry-after": "60" }),
     );
   }
@@ -1006,198 +1708,260 @@ Deno.serve(async (req) => {
   const requestUrl = new URL(req.url);
   const wantsRefresh = requestUrl.searchParams.get("refresh") === "1";
   if (wantsRefresh && !(await authorizedRefresh(req))) {
-    return new Response(JSON.stringify({ error: "unauthorized refresh" }), headers(401));
+    return new Response(
+      JSON.stringify({ error: "unauthorized refresh" }),
+      headers(401),
+    );
   }
 
   if (!wantsRefresh && cache && Date.now() - cache.at < CACHE_TTL_MS) {
     const body = activeCachedBody(cache.body);
     if (body) {
       cache.body = body;
-      return new Response(body, headers(200, {
-        "cache-control": "public, max-age=60, stale-while-revalidate=300",
-        "x-verified-at": cache.verifiedAt,
-      }));
+      return new Response(
+        body,
+        headers(200, {
+          "cache-control": "public, max-age=60, stale-while-revalidate=300",
+          "x-verified-at": cache.verifiedAt,
+          "x-collection-stats": cache.collectionStats,
+        }),
+      );
     }
   }
 
   if (!wantsRefresh) {
     const snapshot = await readPublicSnapshot().catch(() => null);
-    const snapshotNotices = snapshot?.notices.filter((notice) => activeNotice(notice)) ?? [];
-    if (snapshot && snapshotNotices.length > 0) {
+    const snapshotNotices = snapshot?.notices.filter((notice) =>
+      activeNotice(notice)
+    ) ?? [];
+    if (snapshot) {
       const body = JSON.stringify(snapshotNotices);
-      cache = { at: Date.now(), body, verifiedAt: snapshot.verified_at };
-      const stale = Date.now() - Date.parse(snapshot.verified_at) > SNAPSHOT_STALE_AFTER_MS;
-      return new Response(body, headers(200, {
-        "cache-control": "public, max-age=60, stale-while-revalidate=300",
-        ...(stale ? { "x-data-stale": "1" } : {}),
-        "x-verified-at": snapshot.verified_at,
-      }));
+      const collectionStats = collectionStatsHeader(
+        snapshotNotices,
+        snapshot.stats,
+      );
+      cache = {
+        at: Date.now(),
+        body,
+        verifiedAt: snapshot.verified_at,
+        collectionStats,
+      };
+      const stale =
+        Date.now() - Date.parse(snapshot.verified_at) > SNAPSHOT_STALE_AFTER_MS;
+      return new Response(
+        body,
+        headers(200, {
+          "cache-control": "public, max-age=60, stale-while-revalidate=300",
+          ...(stale ? { "x-data-stale": "1" } : {}),
+          "x-verified-at": snapshot.verified_at,
+          "x-collection-stats": collectionStats,
+        }),
+      );
     }
   }
 
   const serviceKey = serviceKeyParam();
   if (!serviceKey) {
-    return new Response(JSON.stringify({ error: "청약홈 실공고 연결 키가 설정되지 않았습니다." }), headers(503));
+    return new Response(
+      JSON.stringify({ error: "청약홈 실공고 연결 키가 설정되지 않았습니다." }),
+      headers(503),
+    );
   }
 
   try {
     const upstreamState = await readUpstreamState().catch(() => null);
-    if (upstreamState?.retry_after && Date.parse(upstreamState.retry_after) > Date.now()) {
+    if (
+      upstreamState?.retry_after &&
+      Date.parse(upstreamState.retry_after) > Date.now()
+    ) {
       throw new Error(`청약홈 API 재시도 대기 중 ${upstreamState.retry_after}`);
     }
-    const detailParams = { "cond[RCRIT_PBLANC_DE::GTE]": recentAnnouncementCutoff() };
-    const [remndrDetails, remndrModels, aptDetails] = await Promise.all([
-      fetchAll(REMNDR_DETAIL_OPERATION, serviceKey, detailParams),
-      fetchAll(REMNDR_MODEL_OPERATION, serviceKey),
-      fetchAll(APT_DETAIL_OPERATION, serviceKey, detailParams),
-    ]);
-    const groupModels = (items: RawItem[]) => {
-      const grouped = new Map<string, RawItem[]>();
-      for (const item of items) {
-        const key = modelKey(item);
-        grouped.set(key, [...(grouped.get(key) ?? []), item]);
-      }
-      return grouped;
+    const detailParams = {
+      "cond[RCRIT_PBLANC_DE::GTE]": recentAnnouncementCutoff(),
     };
-    const remndrModelsByNotice = groupModels(remndrModels);
+    const detailRows = await fetchDetailRows(serviceKey, detailParams);
+    const allDetails = DETAIL_SOURCES.flatMap((source) =>
+      (detailRows.get(source.kind) ?? []).map((raw) => ({ raw, source }))
+    );
 
     const verifiedAt = new Date().toISOString();
-    let aptCache = await readModelCache().catch(() => new Map<string, ModelCacheRow>());
+    let modelCache = await readModelCache().catch(() =>
+      new Map<string, ModelCacheRow>()
+    );
     const [locationCache, documentCache] = await Promise.all([
       readLocationCache().catch(() => new Map<string, LocationCacheRow>()),
       readDocumentCache().catch(() => new Map<string, DocumentCacheRow>()),
     ]);
-    const relevantApt = relevantAptDetails(aptDetails);
-    const refreshTargets = relevantApt.filter((raw) => {
-      const cached = aptCache.get(modelKey(raw));
-      if (!cached) return true;
-      if (cached.retry_after && Date.parse(cached.retry_after) > Date.now()) return false;
-      return Date.now() - Date.parse(cached.fetched_at) >= MODEL_CACHE_TTL_MS;
-    }).slice(0, MAX_MODEL_REFRESH_PER_RUN);
+    const refreshTargets = DETAIL_SOURCES.flatMap((source) =>
+      relevantDetails(detailRows.get(source.kind) ?? [], source.kind)
+        .map((raw) => ({ raw, source }))
+    )
+      .filter(({ raw }) => {
+        const cached = modelCache.get(modelKey(raw));
+        if (!cached) return true;
+        if (cached.retry_after && Date.parse(cached.retry_after) > Date.now()) {
+          return false;
+        }
+        return Date.now() - Date.parse(cached.fetched_at) >= MODEL_CACHE_TTL_MS;
+      }).slice(0, MAX_MODEL_REFRESH_PER_RUN);
     if (refreshTargets.length > 0) {
-      await refreshAptModelCache(serviceKey, refreshTargets);
-      aptCache = await readModelCache();
+      await refreshModelCache(serviceKey, refreshTargets);
+      modelCache = await readModelCache();
     }
-    const locationTargets = [...remndrDetails, ...aptDetails].filter((raw) => {
+    const locationTargets = allDetails.map(({ raw }) => raw).filter((raw) => {
       if (!text(raw.HSSPLY_ADRES)) return false;
       const cached = locationCache.get(modelKey(raw));
-      return !cached || (cached.retry_after != null && Date.parse(cached.retry_after) <= Date.now());
+      return !cached ||
+        (cached.retry_after != null &&
+          Date.parse(cached.retry_after) <= Date.now());
     }).slice(0, 8);
-    if (locationTargets.length > 0) runInBackground(refreshLocationCache(locationTargets));
+    if (locationTargets.length > 0) {
+      runInBackground(refreshLocationCache(locationTargets));
+    }
     const collectionConflicts: CollectionConflict[] = [];
-    const normalized = [
-      ...remndrDetails.map((raw) => normalize(
+    const normalized = allDetails.map(({ raw, source }) => {
+      const cached = modelCache.get(modelKey(raw));
+      const retrying = cached?.retry_after &&
+        Date.parse(cached.retry_after) > Date.now();
+      return normalizeNotice(
         raw,
-        remndrModelsByNotice.get(modelKey(raw)) ?? [],
+        cached?.models ?? [],
         verifiedAt,
-        "remndr",
-        undefined,
+        source.kind,
+        retrying ? "retrying" : "not-collected",
         locationCache.get(modelKey(raw)),
-        verifiedAt,
+        cached?.fetched_at,
         documentCache.get(modelKey(raw)),
         collectionConflicts,
-      )),
-      ...aptDetails.map((raw) => {
-        const cached = aptCache.get(modelKey(raw));
-        const retrying = cached?.retry_after && Date.parse(cached.retry_after) > Date.now();
-        return normalize(
-          raw,
-          cached?.models ?? [],
-          verifiedAt,
-          "apt",
-          retrying ? "retrying" : "not-collected",
-          locationCache.get(modelKey(raw)),
-          cached?.fetched_at,
-          documentCache.get(modelKey(raw)),
-          collectionConflicts,
-        );
-      }),
-    ];
-    const collectedNotices = normalized
-      .filter((notice): notice is NonNullable<typeof notice> => notice !== null)
-      .filter((notice) => notice.type !== "일반공급" || notice.modelDataStatus === "collected")
-      .filter(activeNotice)
-      .sort((a, b) => Date.parse(a.receiptStart) - Date.parse(b.receiptStart));
+      );
+    });
+    const collectedNotices = publishableNotices(normalized);
 
-    const blockedNoticeIds = new Set(normalized
-      .filter((notice): notice is NonNullable<typeof notice> => notice !== null)
-      .filter((notice) => notice.type === "일반공급" && notice.modelDataStatus !== "collected" && activeNotice(notice))
-      .map((notice) => notice.id));
-    const previousSnapshot = await readPublicSnapshot().catch(() => null);
-    const preservedNotices = (previousSnapshot?.notices ?? [])
-      .filter(activeNotice)
-      .filter((notice) => blockedNoticeIds.has(String(notice.id ?? "")));
     const mergedById = new Map<string, Record<string, unknown>>();
-    for (const notice of [...preservedNotices, ...collectedNotices]) mergedById.set(String(notice.id), notice);
+    for (const notice of collectedNotices) {
+      mergedById.set(String(notice.id), notice);
+    }
     const notices = [...mergedById.values()]
-      .sort((a, b) => Date.parse(String(a.receiptStart)) - Date.parse(String(b.receiptStart)));
-    const publishedNoticeIds = new Set(notices.map((notice) => String(notice.id)));
-    const publishedConflicts = collectionConflicts.filter((conflict) => publishedNoticeIds.has(conflict.noticeKey));
+      .sort((a, b) =>
+        Date.parse(String(a.receiptStart)) - Date.parse(String(b.receiptStart))
+      );
+    const publishedNoticeIds = new Set(
+      notices.map((notice) => String(notice.id)),
+    );
+    const publishedConflicts = collectionConflicts.filter((conflict) =>
+      publishedNoticeIds.has(conflict.noticeKey)
+    );
 
-    const rawStatuses = [
-      ...remndrDetails.map((raw) => rawCollectionStatus(raw, "remndr")),
-      ...aptDetails.map((raw) => rawCollectionStatus(raw, "apt")),
-    ];
+    const rawStatuses = allDetails.map(({ raw, source }) =>
+      rawCollectionStatus(raw, source.kind)
+    );
+    const sources = Object.fromEntries(DETAIL_SOURCES.map((source) => {
+      const rows = detailRows.get(source.kind) ?? [];
+      const active = rows.map((raw) =>
+        normalizeNotice(
+          raw,
+          modelCache.get(modelKey(raw))?.models ?? [],
+          verifiedAt,
+          source.kind,
+        )
+      )
+        .filter((notice) => notice !== null && activeNotice(notice)).length;
+      return [source.detailOperation, { fetched: rows.length, active }];
+    }));
+    const modelPending = notices.filter((notice) =>
+      notice.modelDataStatus !== "collected"
+    ).length;
 
     const stats: CollectionStats = {
-      fetched: remndrDetails.length + aptDetails.length,
+      fetched: allDetails.length,
       valid: normalized.filter((notice) => notice !== null).length,
-      rejected: normalized.filter((notice) => notice !== null && !isValidNotice(notice)).length,
-      conflict: publishedConflicts.length + notices.filter((notice) => documentCache.get(`${notice.manageNo ?? ""}-${notice.pblancNo ?? ""}`)?.status === "conflict").length,
+      rejected: normalized.filter((notice) =>
+        notice !== null && !isValidNotice(notice)
+      ).length,
+      conflict: publishedConflicts.length + notices.filter((notice) =>
+        documentCache.get(`${notice.manageNo ?? ""}-${notice.pblancNo ?? ""}`)
+          ?.status === "conflict"
+      ).length,
       expired: rawStatuses.filter((status) => status.expired).length,
       cancelled: rawStatuses.filter((status) => status.cancelled).length,
-      modelBlocked: blockedNoticeIds.size,
-      preserved: preservedNotices.length,
+      modelBlocked: 0,
+      modelPending,
+      preserved: 0,
       published: notices.length,
+      sources,
     };
-    console.log(JSON.stringify({ event: "homebom_notice_collection", ...stats, verifiedAt }));
-    if (notices.length === 0) throw new Error("검증을 통과한 접수 가능 공고가 없어 기존 스냅샷을 유지합니다.");
+    console.log(
+      JSON.stringify({
+        event: "homebom_notice_collection",
+        ...stats,
+        verifiedAt,
+      }),
+    );
+    if (notices.length === 0) {
+      throw new Error(
+        "검증을 통과한 접수 가능 공고가 없어 기존 스냅샷을 유지합니다.",
+      );
+    }
 
     await Promise.all([
       writePublicSnapshot(notices, stats, verifiedAt),
-      reconcileCollectionConflicts(notices.map((notice) => notice.id), publishedConflicts),
+      reconcileCollectionConflicts(
+        notices.map((notice) => String(notice.id)),
+        publishedConflicts,
+      ),
     ]);
 
     await writeUpstreamState(null, null).catch(() => {});
 
     const body = JSON.stringify(notices);
-    cache = { at: Date.now(), body, verifiedAt };
+    const collectionStats = collectionStatsHeader(
+      notices,
+      stats as unknown as Record<string, unknown>,
+    );
+    cache = { at: Date.now(), body, verifiedAt, collectionStats };
     // HQ 수집 헬스 머신검증용: 숫자만 담는 읽기전용 헤더. 공고 본문·PII는 절대 넣지 않는다.
     // 불변식: fetched >= valid >= published >= 0, 모두 유한 음이 아닌 정수.
     // 카운트 계산이 실패해도 항상 well-formed JSON 이 되도록 방어적으로 폴백한다.
-    let collectionStats: string;
-    try {
-      const published = notices.length;
-      // 업스트림에서 가져온 상세 행 수(무순위/잔여 + APT). notices 는 이 중 유효분을 필터한 부분집합이다.
-      const fetched = remndrDetails.length + aptDetails.length;
-      // normalize/validation 을 통과한 수 = null 제거 후 = 정렬 후와 동일 = published.
-      const valid = published;
-      // 이 응답은 새로 수집한 결과이므로 last-known-good 에서 보존한 항목은 없다.
-      const preserved = 0;
-      collectionStats = JSON.stringify({ published, fetched, valid, preserved });
-    } catch {
-      const n = Array.isArray(notices) ? notices.length : 0;
-      collectionStats = JSON.stringify({ published: n, fetched: n, valid: n, preserved: 0 });
-    }
-    return new Response(body, headers(200, {
-      "cache-control": "public, max-age=60, stale-while-revalidate=300",
-      "x-verified-at": verifiedAt,
-      "x-collection-stats": collectionStats,
-    }));
+    return new Response(
+      body,
+      headers(200, {
+        "cache-control": "public, max-age=60, stale-while-revalidate=300",
+        "x-verified-at": verifiedAt,
+        "x-collection-stats": collectionStats,
+      }),
+    );
   } catch (err) {
     if (isQuotaError(err)) {
-      await writeUpstreamState(nextKstQuotaReset(), err instanceof Error ? err.message.slice(0, 500) : "quota exceeded").catch(() => {});
+      await writeUpstreamState(
+        nextKstQuotaReset(),
+        err instanceof Error ? err.message.slice(0, 500) : "quota exceeded",
+      ).catch(() => {});
     }
     const snapshot = await readPublicSnapshot().catch(() => null);
-    const snapshotNotices = snapshot?.notices.filter((notice) => activeNotice(notice)) ?? [];
-    if (snapshot && snapshotNotices.length > 0) {
+    const snapshotNotices = snapshot?.notices.filter((notice) =>
+      activeNotice(notice)
+    ) ?? [];
+    if (snapshot) {
       const body = JSON.stringify(snapshotNotices);
-      cache = { at: Date.now(), body, verifiedAt: snapshot.verified_at };
-      return new Response(body, headers(200, {
-        "cache-control": "public, max-age=30, stale-while-revalidate=300",
-        "x-data-stale": "1",
-        "x-verified-at": snapshot.verified_at,
-      }));
+      const collectionStats = collectionStatsHeader(
+        snapshotNotices,
+        snapshot.stats,
+      );
+      cache = {
+        at: Date.now(),
+        body,
+        verifiedAt: snapshot.verified_at,
+        collectionStats,
+      };
+      return new Response(
+        body,
+        headers(200, {
+          "cache-control": "public, max-age=30, stale-while-revalidate=300",
+          "x-data-stale": "1",
+          "x-verified-at": snapshot.verified_at,
+          "x-collection-stats": collectionStats,
+        }),
+      );
     }
     // DB 스냅샷도 읽지 못한 짧은 장애 구간에만 인스턴스 메모리 복사본을 사용한다.
     if (cache) {
@@ -1207,10 +1971,15 @@ Deno.serve(async (req) => {
           "cache-control": "public, max-age=30, stale-while-revalidate=300",
           "x-data-stale": "1",
           "x-verified-at": cache.verifiedAt,
+          "x-collection-stats": cache.collectionStats,
         }),
       );
     }
-    const message = err instanceof Error ? err.message : "청약홈 공고를 불러오지 못했습니다.";
+    const message = err instanceof Error
+      ? err.message
+      : "청약홈 공고를 불러오지 못했습니다.";
     return new Response(JSON.stringify({ error: message }), headers(502));
   }
-});
+}
+
+if (import.meta.main) Deno.serve(handleRequest);

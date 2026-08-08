@@ -5,7 +5,7 @@ export type NoticeSource = "live" | "stale" | "not-connected";
 
 /** 네이티브 전용 마지막 확인본 저장 키. 웹의 localStorage 키와 분리한다. */
 export const LKG_KEY = "homebom:native:notices:lkg:v1";
-export const LKG_MAX_AGE_MS = 72 * 60 * 60 * 1000;
+export const LKG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** 요청이 이 시간 안에 응답하지 않으면 중단하고 에러 상태로 전환한다(무한 로딩 방지). */
 export const FETCH_TIMEOUT_MS = 10_000;
 

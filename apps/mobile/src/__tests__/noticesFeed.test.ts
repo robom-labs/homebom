@@ -1,4 +1,4 @@
-// isActiveNotice 필터, LKG 저장/복원/72시간 만료, fetch 상태 파생(live/stale/not-connected/empty/error)을 검증한다.
+// isActiveNotice 필터, LKG 저장/복원/7일 만료, fetch 상태 파생(live/stale/not-connected/empty/error)을 검증한다.
 import { describe, expect, it, vi } from "vitest";
 import type { Notice } from "@zoopzoopcall/core";
 import {
@@ -93,15 +93,15 @@ describe("LKG 저장/복원/만료", () => {
     expect(store.data[LKG_KEY]).toBeUndefined();
   });
 
-  it("저장 후 72시간이 지나면 만료로 처리하고 키를 지운다", async () => {
+  it("저장 후 7일이 지나면 만료로 처리하고 키를 지운다", async () => {
     const store = createStore();
     const savedAt = new Date("2026-07-10T00:00:00Z").toISOString();
     await saveLastKnownNotices(store, { notices: [makeNotice()], verifiedAt: null, savedAt });
 
-    const within = Date.parse(savedAt) + 71 * HOUR;
+    const within = Date.parse(savedAt) + 167 * HOUR;
     expect(await loadLastKnownNotices(store, within)).not.toBeNull();
 
-    const expired = Date.parse(savedAt) + 73 * HOUR;
+    const expired = Date.parse(savedAt) + 169 * HOUR;
     expect(await loadLastKnownNotices(store, expired)).toBeNull();
     expect(store.data[LKG_KEY]).toBeUndefined();
   });

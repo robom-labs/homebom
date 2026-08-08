@@ -87,7 +87,7 @@ describe("nativeNoticeFromCore", () => {
     );
     expect(result.manageNo).toBe("");
     expect(result.pblancNo).toBe("");
-    expect(result.supplyCount).toBe(0);
+    expect(result.supplyCount).toBeNull();
     expect(result.address).toBe("서울특별시");
     expect(result.category).toBe("무순위");
     expect(result.sourceLabel).toBe("한국부동산원 청약홈");
