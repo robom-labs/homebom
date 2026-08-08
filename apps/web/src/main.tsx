@@ -15,6 +15,9 @@ createRoot(document.getElementById("root")!).render(
 );
 
 if ("serviceWorker" in navigator) {
+  // 최초 설치의 clients.claim()은 controllerchange를 일으키지만 현재 페이지는 이미 최신 셸이다.
+  // 기존 서비스워커가 있던 실제 업데이트에서만 한 번 새로고침해 입력 중 화면을 불필요하게 끊지 않는다.
+  const hadServiceWorkerController = navigator.serviceWorker.controller !== null;
   window.addEventListener("load", () => {
     void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then((registration) => {
       if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
@@ -27,7 +30,7 @@ if ("serviceWorker" in navigator) {
   });
   let refreshing = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (refreshing) return;
+    if (!hadServiceWorkerController || refreshing) return;
     refreshing = true;
     window.location.reload();
   });

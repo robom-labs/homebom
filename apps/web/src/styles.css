@@ -511,7 +511,7 @@ a { color: inherit; }
   .notice-calendar__marker, .notice-calendar__more { font-size: 7px; }
   .segmented { gap: 5px; }
   .segmented__item { gap: 3px; padding-inline: 4px; font-size: 12px; }
-  .notice-calendar__head { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .notice-calendar__head { display: grid; grid-template-columns: minmax(78px, 1fr) minmax(0, 1.45fr); align-items: end; }
   .notice-calendar__month-title { text-align: left; }
   .notice-calendar__month-tabs { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
