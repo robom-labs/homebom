@@ -39,6 +39,15 @@ assert(expo.scheme === "homebom", "scheme은 homebom이어야 합니다.");
 assert(expo.android.package === "kr.robom.homebom", "Android package가 일치하지 않습니다.");
 assert(Number.isInteger(expo.android.versionCode) && expo.android.versionCode >= 16, "Android versionCode는 Play 미사용 16 이상이어야 합니다.");
 assert(!(expo.android.permissions ?? []).includes("com.google.android.gms.permission.AD_ID"), "AD_ID 권한을 선언하면 안 됩니다.");
+for (const permission of [
+  "android.permission.CAMERA",
+  "android.permission.RECORD_AUDIO",
+  "android.permission.SYSTEM_ALERT_WINDOW",
+  "android.permission.READ_EXTERNAL_STORAGE",
+  "android.permission.WRITE_EXTERNAL_STORAGE",
+]) {
+  assert(expo.android.blockedPermissions?.includes(permission), `${permission} 권한은 네이티브 병합에서 제거해야 합니다.`);
+}
 assert(expo.ios.bundleIdentifier === "kr.robom.homebom", "iOS bundleIdentifier가 일치하지 않습니다.");
 assert(!expo.ios.associatedDomains.includes("applinks:robom.kr"), "검증 파일이 비어 있는 동안 iOS Universal Link를 선언하면 안 됩니다.");
 assert(expo.icon === "./assets/icon.png", "스토어용 앱 아이콘 경로가 필요합니다.");
