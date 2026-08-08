@@ -8,6 +8,5 @@
     "google": "unconfigured",
     "apple": "unconfigured"
   },
-  "namespace": "homebom",
-  "calendarSensitiveSync": "not-applicable"
+  "namespace": "homebom"
 }
