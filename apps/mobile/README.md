@@ -4,7 +4,7 @@
 
 ## 앱 계약
 
-- 앱 버전은 루트·코어와 동일한 `0.16.0`이다. (`app.json`·`package.json`이 일치해야 static 검증을 통과한다.)
+- 앱 버전은 루트·코어와 동일한 `0.17.0`이다. (`app.json`·`package.json`이 일치해야 static 검증을 통과한다.)
 - Android application ID와 iOS bundle identifier는 모두 `kr.robom.homebom`이다.
 - custom scheme은 `homebom`이다.
 - 공고 안정 ID는 웹 도메인 규칙과 같은 `HOUSE_MANAGE_NO-PBLANC_NO` 형식이며, 공유 코어 `@zoopzoopcall/core`가 발급한 값을 그대로 쓴다.

@@ -1,7 +1,8 @@
 // nativeNoticeFromCore가 존재하는 필드에서만 일정을 만들고 순서·폴백을 지키는지 검증한다.
 import { describe, expect, it } from "vitest";
 import { kstDateToUtcIso, type Notice } from "@zoopzoopcall/core";
-import { nativeNoticeFromCore } from "../domain/noticeMapping";
+import { noticeDeadlineSummary } from "../domain/notice";
+import { nativeNoticeAreaLabel, nativeNoticeFromCore } from "../domain/noticeMapping";
 
 // 실제 청약홈 응답 형태를 본뜬 테스트 픽스처다. 앱 데이터로 출하되지 않는다.
 function makeNotice(overrides: Partial<Notice> = {}): Notice {
@@ -103,5 +104,56 @@ describe("nativeNoticeFromCore", () => {
     const noticeUrl = "https://www.applyhome.co.kr/ai/aia/selectAPTLttotPblancDetail.do?houseManageNo=2026000123&pblancNo=1";
     expect(nativeNoticeFromCore(makeNotice({ noticeUrl })).officialUrl).toBe(noticeUrl);
     expect(nativeNoticeFromCore(makeNotice({ noticeUrl: undefined })).officialUrl).toBe("https://www.applyhome.co.kr");
+  });
+
+  it("공식 가격·면적·자격 정보만 모바일 빠른 판단 값으로 옮긴다", () => {
+    const result = nativeNoticeFromCore(makeNotice({
+      priceMin: 47_750,
+      priceMax: 48_550,
+      modelSummaries: [
+        { supplyArea: "59.94", priceMax: 47_750 },
+        { supplyArea: "84.98", priceMax: 48_550 },
+      ],
+      moveInMonth: "2028년 3월",
+      corrected: true,
+      decisionSupport: {
+        subscriptionAccount: "청약통장 불필요",
+        selectionMethod: "추첨제",
+        source: "notice-pdf",
+        verifiedAt: "2026-07-09T00:00:00Z",
+      },
+    }));
+    expect(result.decision).toMatchObject({
+      price: "4억 7,750만원 ~ 4억 8,550만원",
+      area: "59.94~84.98㎡ · 약 18.1~25.7평",
+      subscriptionAccount: "청약통장 불필요",
+      selectionMethod: "추첨제",
+      moveInMonth: "2028년 3월",
+      corrected: true,
+      verifiedAt: "2026-07-09T00:00:00Z",
+    });
+  });
+
+  it("주택형 면적이 없으면 면적을 추측하지 않는다", () => {
+    expect(nativeNoticeAreaLabel(makeNotice({ modelSummaries: undefined }))).toBeUndefined();
+    expect(nativeNoticeFromCore(makeNotice()).decision?.area).toBeUndefined();
+  });
+
+  it("KST 날짜 경계에서 접수 시작·마감 행동을 정확히 표시한다", () => {
+    const notice = nativeNoticeFromCore(makeNotice());
+    expect(noticeDeadlineSummary(notice, Date.parse("2026-07-18T15:00:00Z"))).toMatchObject({
+      days: 1,
+      label: "접수 시작 D-1",
+      state: "upcoming",
+    });
+    expect(noticeDeadlineSummary(notice, Date.parse("2026-07-21T15:00:00Z"))).toMatchObject({
+      days: 0,
+      label: "오늘 접수 마감",
+      state: "open",
+    });
+    expect(noticeDeadlineSummary(notice, Date.parse("2026-07-22T09:00:00Z"))).toMatchObject({
+      label: "접수 마감",
+      state: "closed",
+    });
   });
 });

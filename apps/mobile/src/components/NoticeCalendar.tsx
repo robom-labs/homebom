@@ -16,6 +16,13 @@ type Props = {
   selectedDate: string | null;
 };
 
+const kindStyles = {
+  announcement: { color: colors.focus, label: "공고" },
+  receipt: { color: colors.accentDeep, label: "접수" },
+  winner: { color: colors.warning, label: "발표" },
+  contract: { color: colors.danger, label: "계약" },
+} as const;
+
 export function NoticeCalendar({
   monthOffset,
   notices,
@@ -58,6 +65,15 @@ export function NoticeCalendar({
             );
           })}
         </View>
+      </View>
+
+      <View accessibilityLabel="일정 색상 안내" style={styles.legend}>
+        {Object.values(kindStyles).map((item) => (
+          <View key={item.label} style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+            <Text style={styles.legendLabel}>{item.label}</Text>
+          </View>
+        ))}
       </View>
 
       <View style={styles.weekRow} accessibilityElementsHidden>
@@ -104,17 +120,31 @@ export function NoticeCalendar({
             >
               <Text style={[styles.day, cell.today && styles.dayToday]}>{cell.day}</Text>
               {enabled ? (
-                <View style={styles.marker}>
-                  <Text style={[styles.markerText, cell.today && styles.markerTextToday]}>
-                    {cell.noticeCount}
-                  </Text>
+                <View style={styles.markerRow}>
+                  <View style={styles.marker}>
+                    <Text style={[styles.markerText, cell.today && styles.markerTextToday]}>
+                      {cell.noticeCount}
+                    </Text>
+                  </View>
+                  <View accessibilityElementsHidden style={styles.kindDots}>
+                    {cell.kinds.map((kind) => (
+                      <View
+                        key={kind}
+                        style={[styles.kindDot, { backgroundColor: kindStyles[kind].color }]}
+                      />
+                    ))}
+                  </View>
                 </View>
               ) : null}
             </Pressable>
           );
         })}
       </View>
-      <Text style={styles.hint}>일정이 있는 날짜를 누르면 해당 공고만 바로 볼 수 있습니다.</Text>
+      <Text style={styles.hint}>
+        {selectedDate
+          ? `${Number(selectedDate.slice(5, 7))}월 ${Number(selectedDate.slice(8, 10))}일 일정을 선택했습니다.`
+          : "일정이 있는 날짜를 누르면 해당 공고만 바로 볼 수 있습니다."}
+      </Text>
     </View>
   );
 }
@@ -137,6 +167,15 @@ const styles = StyleSheet.create({
   titleCopy: { flex: 1, minWidth: 0 },
   eyebrow: { color: colors.accentDeep, fontSize: 11, fontWeight: "900" },
   title: { marginTop: 2, color: colors.ink, fontSize: 18, fontWeight: "900" },
+  legend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 10,
+  },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendLabel: { color: colors.muted, fontSize: 10, fontWeight: "800" },
   monthTabs: {
     flexDirection: "row",
     gap: 3,
@@ -188,6 +227,9 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: colors.hero,
   },
+  markerRow: { alignItems: "center", gap: 2 },
+  kindDots: { flexDirection: "row", gap: 2 },
+  kindDot: { width: 4, height: 4, borderRadius: 2 },
   markerText: { color: colors.accentDeep, fontSize: 9, fontWeight: "900" },
   markerTextToday: { color: colors.accentDeep },
   hint: { marginTop: 8, color: colors.muted, fontSize: 11, lineHeight: 16 },

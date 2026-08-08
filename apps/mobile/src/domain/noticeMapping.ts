@@ -1,5 +1,13 @@
 // 코어 Notice를 네이티브 화면용 NativeNotice로 바꾸는 순수 매핑 함수다.
-import { kstDateKey, kstDateToUtcIso, normalizeYmd, type Notice } from "@zoopzoopcall/core";
+import {
+  formatArea,
+  formatPriceRange,
+  kstDateKey,
+  kstDateToUtcIso,
+  normalizeYmd,
+  pyeongFromSqm,
+  type Notice,
+} from "@zoopzoopcall/core";
 import type { NativeNotice, NoticeMilestone } from "./notice";
 
 const DAY_MS = 86_400_000;
@@ -23,6 +31,23 @@ function notifyDayBefore(receiptStartIso: string): string | undefined {
 /** housingCategory → officialTypeName → 유형명 순으로 고객용 분류 문구를 고른다. */
 function categoryLabel(notice: Notice): string {
   return notice.housingCategory ?? notice.officialTypeName ?? notice.type;
+}
+
+function trimDecimal(value: number, fractionDigits: number): string {
+  return value.toFixed(fractionDigits).replace(/\.?0+$/u, "");
+}
+
+/** 청약홈 주택형별 공급면적을 중복 제거한 최소~최대 범위로 표시한다. */
+export function nativeNoticeAreaLabel(notice: Notice): string | undefined {
+  const areas = [...new Set((notice.modelSummaries ?? [])
+    .map((model) => Number.parseFloat(String(model.supplyArea ?? "")))
+    .filter((value) => Number.isFinite(value) && value > 0))]
+    .sort((left, right) => left - right);
+  const first = areas[0];
+  const last = areas[areas.length - 1];
+  if (first == null || last == null) return undefined;
+  if (first === last) return formatArea(first) ?? undefined;
+  return `${trimDecimal(first, 2)}~${trimDecimal(last, 2)}㎡ · 약 ${trimDecimal(pyeongFromSqm(first), 1)}~${trimDecimal(pyeongFromSqm(last), 1)}평`;
 }
 
 /**
@@ -80,6 +105,9 @@ export function nativeNoticeFromCore(notice: Notice): NativeNotice {
 
   milestones.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
 
+  const price = formatPriceRange(notice) ?? undefined;
+  const area = nativeNoticeAreaLabel(notice);
+
   return {
     id: notice.id,
     manageNo: notice.manageNo ?? "",
@@ -93,6 +121,19 @@ export function nativeNoticeFromCore(notice: Notice): NativeNotice {
       : null,
     sourceLabel: SOURCE_LABEL,
     officialUrl: notice.noticeUrl ?? notice.applyHomeUrl,
+    decision: {
+      ...(price ? { price } : {}),
+      ...(area ? { area } : {}),
+      ...(notice.decisionSupport?.subscriptionAccount
+        ? { subscriptionAccount: notice.decisionSupport.subscriptionAccount }
+        : {}),
+      ...(notice.decisionSupport?.selectionMethod
+        ? { selectionMethod: notice.decisionSupport.selectionMethod }
+        : {}),
+      ...(notice.moveInMonth ? { moveInMonth: notice.moveInMonth } : {}),
+      ...(notice.corrected ? { corrected: true } : {}),
+      verifiedAt: notice.lastVerifiedAt,
+    },
     milestones,
   };
 }
