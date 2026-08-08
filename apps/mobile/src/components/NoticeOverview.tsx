@@ -1,6 +1,7 @@
 // 공고의 출처와 안정 식별자, 공급 핵심값을 카드로 보여준다.
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
-import type { NativeNotice } from "../domain/notice";
+import { formatMilestoneRange, type NativeNotice } from "../domain/notice";
+import { receiptMilestone } from "../domain/noticeDiscovery";
 import { colors } from "../theme";
 
 type Props = {
@@ -13,6 +14,7 @@ const SUPPORT_URL = process.env.EXPO_PUBLIC_SUPPORT_URL ?? "https://robom.kr/sup
 const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL ?? "https://robom.kr/privacy/homebom";
 
 export function NoticeOverview({ notice, expanded, onToggle }: Props) {
+  const receipt = receiptMilestone(notice);
   return (
     <View style={styles.card}>
       <Pressable
@@ -31,6 +33,7 @@ export function NoticeOverview({ notice, expanded, onToggle }: Props) {
           {notice.region}{notice.supplyCount === null ? "" : ` · 공급 ${notice.supplyCount}세대`}
         </Text>
         <Text style={styles.address}>{notice.address}</Text>
+        {receipt && <Text style={styles.receipt}>접수 · {formatMilestoneRange(receipt)}</Text>}
         <Text style={styles.toggleLabel}>{expanded ? "상세 접기" : "일정과 알림 보기"}</Text>
       </Pressable>
       {expanded && (
@@ -111,6 +114,13 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 20,
+  },
+  receipt: {
+    marginTop: 10,
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "800",
   },
   toggleLabel: {
     marginTop: 14,

@@ -201,7 +201,7 @@ export function ListScreen({ notices, source, error, loading, verifiedAt, subs }
 
       {!loading && filtered.length === 0 && source === "not-connected" && (
         <div className="empty">
-          <p className="empty__title">실공고 연결 대기 중입니다</p>
+          <p className="empty__title">실공고 연결 주소를 확인해 주세요</p>
           <p className="empty__body">
             청약 공고는 9시에만 보이는 방식이 아닙니다. 데이터 연결이 완료되기 전까지 임의 단지나 추정
             공고는 보여주지 않습니다.

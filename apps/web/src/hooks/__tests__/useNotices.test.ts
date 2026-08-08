@@ -55,6 +55,28 @@ describe("last known good notices", () => {
     expect(loadLastKnownNotices()).toEqual(value);
   });
 
+  it("접수 마감 경계에서 저장과 복원은 같은 기준 시각을 쓴다", () => {
+    const boundary = Date.parse("2026-08-09T00:00:00.000Z");
+    const value = {
+      notices: [{
+        id: "boundary-1",
+        type: "무순위" as const,
+        houseName: "경계 단지",
+        region: "서울",
+        receiptStart: "2026-08-08T00:00:00.000Z",
+        receiptEnd: new Date(boundary).toISOString(),
+        applyHomeUrl: "https://www.applyhome.co.kr/",
+        lastVerifiedAt: "2026-08-08T00:00:00.000Z",
+      }],
+      verifiedAt: "2026-08-08T00:00:00.000Z",
+      savedAt: new Date(boundary - 1).toISOString(),
+    };
+
+    expect(saveLastKnownNotices(value, boundary - 1)).toBe(true);
+    expect(loadLastKnownNotices(boundary - 1)?.notices).toHaveLength(1);
+    expect(loadLastKnownNotices(boundary + 1)).toBeNull();
+  });
+
   it("깨진 캐시는 무시한다", () => {
     localStorage.setItem("homebom:notices:lkg:v1", "{");
     expect(loadLastKnownNotices()).toBeNull();

@@ -14,18 +14,18 @@ export const LKG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type LastKnownGood = { notices: Notice[]; verifiedAt: string | null; savedAt: string };
 
-export function loadLastKnownNotices(): LastKnownGood | null {
+export function loadLastKnownNotices(now = Date.now()): LastKnownGood | null {
   try {
     const raw = globalThis.localStorage?.getItem(LKG_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as LastKnownGood;
     if (!Array.isArray(parsed.notices) || typeof parsed.savedAt !== "string") return null;
-    if (!Number.isFinite(Date.parse(parsed.savedAt)) || Date.now() - Date.parse(parsed.savedAt) > LKG_MAX_AGE_MS) {
+    if (!Number.isFinite(Date.parse(parsed.savedAt)) || now - Date.parse(parsed.savedAt) > LKG_MAX_AGE_MS) {
       globalThis.localStorage?.removeItem(LKG_KEY);
       return null;
     }
     const validated = parseNoticeList(parsed.notices);
-    const notices = validated.notices.filter(isActiveNotice).map(prepareNotice);
+    const notices = validated.notices.filter((notice) => isActiveNotice(notice, now)).map(prepareNotice);
     if (validated.rejected.length > 0) console.warn("HomeBom LKG rejected rows", validated.rejected);
     if (notices.length === 0) {
       globalThis.localStorage?.removeItem(LKG_KEY);
@@ -37,10 +37,10 @@ export function loadLastKnownNotices(): LastKnownGood | null {
   }
 }
 
-export function saveLastKnownNotices(value: LastKnownGood): boolean {
+export function saveLastKnownNotices(value: LastKnownGood, now = Date.now()): boolean {
   try {
     const validated = parseNoticeList(value.notices);
-    const notices = validated.notices.filter(isActiveNotice).map(prepareNotice);
+    const notices = validated.notices.filter((notice) => isActiveNotice(notice, now)).map(prepareNotice);
     if (notices.length === 0) return false;
     globalThis.localStorage?.setItem(LKG_KEY, JSON.stringify({ ...value, notices }));
     return true;
@@ -49,8 +49,8 @@ export function saveLastKnownNotices(value: LastKnownGood): boolean {
   }
 }
 
-function isActiveNotice(notice: Notice): boolean {
-  return notice.cancelled !== true && Date.parse(notice.receiptEnd) >= Date.now();
+function isActiveNotice(notice: Notice, now: number): boolean {
+  return notice.cancelled !== true && Date.parse(notice.receiptEnd) >= now;
 }
 
 export function noticeResponseMeta(headers: Headers): {
@@ -82,7 +82,7 @@ export function useNotices() {
       setNotices(cached?.notices.map(prepareNotice) ?? []);
       setSource(cached ? "stale" : "not-connected");
       setVerifiedAt(cached?.verifiedAt ?? null);
-      setError(cached ? "공식 연결을 찾지 못해 이 기기에 저장된 마지막 확인본을 보여드려요." : "실공고 연결이 아직 완료되지 않았습니다. 공고는 특정 시간에만 보이는 방식이 아닙니다.");
+      setError(cached ? "공식 연결을 찾지 못해 이 기기에 저장된 마지막 확인본을 보여드려요." : "실공고 연결 주소가 없습니다. 공고는 특정 시간에만 보이는 방식이 아닙니다.");
       setLoading(false);
       return;
     }
@@ -98,13 +98,17 @@ export function useNotices() {
       const meta = noticeResponseMeta(res.headers);
       const parsed = parseNoticeList(data);
       if (parsed.rejected.length > 0) console.warn("HomeBom API rejected rows", parsed.rejected);
-      const normalized = parsed.notices.filter(isActiveNotice).map(prepareNotice);
+      const fetchedAt = Date.now();
+      const normalized = parsed.notices.filter((notice) => isActiveNotice(notice, fetchedAt)).map(prepareNotice);
       if (data.length > 0 && normalized.length === 0) throw new Error("검증을 통과한 접수 가능 공고가 없습니다.");
       setNotices(normalized);
       setSource(meta.source);
       setVerifiedAt(meta.verifiedAt);
       if (meta.source === "live") {
-        saveLastKnownNotices({ notices: normalized, verifiedAt: meta.verifiedAt, savedAt: new Date().toISOString() });
+        saveLastKnownNotices(
+          { notices: normalized, verifiedAt: meta.verifiedAt, savedAt: new Date(fetchedAt).toISOString() },
+          fetchedAt,
+        );
       }
     } catch (err) {
       const cached = loadLastKnownNotices();

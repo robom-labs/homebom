@@ -25,7 +25,7 @@ function permissionAllowsNotifications(status: Notifications.NotificationPermiss
     || status.ios?.status === Notifications.IosAuthorizationStatus.EPHEMERAL;
 }
 
-async function ensurePermissionAfterUserAction(): Promise<boolean> {
+async function ensurePermission(requestPermission: boolean): Promise<boolean> {
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: "청약 일정",
@@ -38,6 +38,7 @@ async function ensurePermissionAfterUserAction(): Promise<boolean> {
 
   const current = await Notifications.getPermissionsAsync();
   if (permissionAllowsNotifications(current)) return true;
+  if (!requestPermission) return false;
 
   const requested = await Notifications.requestPermissionsAsync({
     ios: {
@@ -62,6 +63,7 @@ export async function cancelNoticeNotifications(notificationIds: readonly string
 export async function scheduleNoticeNotifications(
   notice: NativeNotice,
   now = new Date(),
+  options: { requestPermission?: boolean } = {},
 ): Promise<NotificationScheduleResult> {
   const upcoming = notice.milestones.filter((milestone) => (
     milestone.notificationAt && Date.parse(milestone.notificationAt) > now.getTime()
@@ -71,7 +73,7 @@ export async function scheduleNoticeNotifications(
   }
 
   try {
-    if (!(await ensurePermissionAfterUserAction())) {
+    if (!(await ensurePermission(options.requestPermission !== false))) {
       return { kind: "permission-denied", notificationIds: [], failedCount: 0 };
     }
   } catch {

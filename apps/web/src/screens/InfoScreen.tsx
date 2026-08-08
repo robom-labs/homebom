@@ -223,8 +223,8 @@ export function InfoScreen({ source }: { source: NoticeSource }) {
             href={app.installUrl}
             icon={IC.house}
             title={app.name}
-            sub={(APP_DESCRIPTIONS[app.id] || "로봄 패밀리 앱") + " · 2026년 8월 초 출시 예정"}
-            badge="준비 중"
+            sub={(APP_DESCRIPTIONS[app.id] || "로봄 패밀리 앱") + " · 설치·테스트 참여 방법 확인"}
+            badge="설치 안내"
           />
         ))}
       </section>

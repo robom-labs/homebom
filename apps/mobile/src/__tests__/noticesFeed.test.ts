@@ -112,7 +112,7 @@ describe("fetchNotices 상태 파생", () => {
     const result = await fetchNotices({ url: undefined, storage: createStore() });
     expect(result.source).toBe("not-connected");
     expect(result.notices).toHaveLength(0);
-    expect(result.error).toContain("연결이 아직 완료되지 않았습니다");
+    expect(result.error).toContain("연결 주소가 없습니다");
   });
 
   it("URL이 없어도 캐시가 있으면 stale로 마지막 확인본을 보여준다", async () => {
@@ -129,6 +129,23 @@ describe("fetchNotices 상태 파생", () => {
     const result = await fetchNotices({ url: "https://example.test/notices", storage: store, fetchImpl });
     expect(result.source).toBe("live");
     expect(result.notices).toHaveLength(1);
+    expect(store.data[LKG_KEY]).toBeDefined();
+  });
+
+  it("한 응답의 활성 판정과 LKG 저장은 같은 기준 시각을 쓴다", async () => {
+    const store = createStore();
+    const boundary = Date.parse("2026-08-09T00:00:00Z");
+    const now = vi.fn()
+      .mockReturnValueOnce(boundary - 1)
+      .mockReturnValueOnce(boundary + 1);
+    const result = await fetchNotices({
+      url: "https://example.test/notices",
+      storage: store,
+      now,
+      fetchImpl: vi.fn(async () => jsonResponse([makeNotice({ receiptEnd: new Date(boundary).toISOString() })])),
+    });
+    expect(result.notices).toHaveLength(1);
+    expect(now).toHaveBeenCalledTimes(1);
     expect(store.data[LKG_KEY]).toBeDefined();
   });
 
@@ -195,5 +212,27 @@ describe("fetchNotices 상태 파생", () => {
     });
     expect(result.source).toBe("not-connected");
     expect(result.error).toBe("bad gateway");
+  });
+
+  it("10초 동안 응답이 없으면 요청을 중단하고 재시도 안내를 보여준다", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      })) as unknown as typeof fetch;
+      const pending = fetchNotices({
+        url: "https://example.test/notices",
+        storage: createStore(),
+        fetchImpl,
+      });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+
+      expect(result.source).toBe("not-connected");
+      expect(result.error).toContain("10초 안에 오지 않아");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

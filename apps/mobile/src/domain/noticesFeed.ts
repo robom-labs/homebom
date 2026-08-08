@@ -10,7 +10,7 @@ export const LKG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export const FETCH_TIMEOUT_MS = 10_000;
 
 export const NOT_CONNECTED_MESSAGE =
-  "실공고 연결이 아직 완료되지 않았습니다. 공고는 특정 시간에만 보이는 방식이 아닙니다.";
+  "실공고 연결 주소가 없습니다. 공고는 특정 시간에만 보이는 방식이 아닙니다.";
 const NOT_CONNECTED_WITH_CACHE_MESSAGE =
   "공식 연결을 찾지 못해 이 기기에 저장된 마지막 확인본을 보여드려요. 신청 전 원문을 확인해 주세요.";
 const STALE_MESSAGE =
@@ -93,10 +93,11 @@ export async function loadLastKnownNotices(
 export async function saveLastKnownNotices(
   storage: AsyncKeyValueStore,
   value: LastKnownGood,
+  now = Date.now(),
 ): Promise<boolean> {
   try {
     const validated = parseNoticeList(value.notices);
-    const notices = validated.notices.filter((notice) => isActiveNotice(notice)).map(prepareNotice);
+    const notices = validated.notices.filter((notice) => isActiveNotice(notice, now)).map(prepareNotice);
     if (notices.length === 0) return false;
     await storage.setItem(LKG_KEY, JSON.stringify({ ...value, notices }));
     return true;
@@ -142,10 +143,15 @@ export async function fetchNotices({
     const meta = noticeResponseMeta(res.headers);
     const parsed = parseNoticeList(data);
     if (parsed.rejected.length > 0) console.warn("HomeBom API rejected rows", parsed.rejected);
-    const normalized = sortByReceiptEnd(parsed.notices.filter((notice) => isActiveNotice(notice, now())).map(prepareNotice));
+    const fetchedAt = now();
+    const normalized = sortByReceiptEnd(parsed.notices.filter((notice) => isActiveNotice(notice, fetchedAt)).map(prepareNotice));
     if (data.length > 0 && normalized.length === 0) throw new Error(NO_ACTIVE_MESSAGE);
     if (meta.source === "live") {
-      await saveLastKnownNotices(storage, { notices: normalized, verifiedAt: meta.verifiedAt, savedAt: new Date(now()).toISOString() });
+      await saveLastKnownNotices(
+        storage,
+        { notices: normalized, verifiedAt: meta.verifiedAt, savedAt: new Date(fetchedAt).toISOString() },
+        fetchedAt,
+      );
     }
     return { notices: normalized, source: meta.source, error: null, verifiedAt: meta.verifiedAt };
   } catch (err) {
